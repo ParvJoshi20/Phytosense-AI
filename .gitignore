@@ -1,0 +1,35 @@
+# =========================================
+# ROOT .gitignore - Phytosense AI
+# =========================================
+
+# 1. Machine Learning Datasets & Heavy Files
+# Prevents pushing massive PlantVillage/PlantDoc image folders
+backend/ml_pipeline/data/*
+!backend/ml_pipeline/data/.keep
+*.csv
+*.dat
+
+# 2. PyTorch Model Weights
+# Prevents pushing exported models loaded by FastAPI
+backend/ml_pipeline/weights/*.pth
+backend/ml_pipeline/weights/*.pt
+backend/ml_pipeline/weights/*.onnx
+
+# 3. Python & Backend Environment
+# Ignores virtual environments and cache
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.venv/
+
+# 4. Secrets & Configuration
+# Ignores your database and Cloud storage secret keys
+.env
+.env.local
+backend/.env
+
+# 5. OS Generated Files
+.DS_Store
+Thumbs.db
