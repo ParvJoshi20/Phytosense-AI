@@ -2,34 +2,70 @@
 # ROOT .gitignore - Phytosense AI
 # =========================================
 
-# 1. Machine Learning Datasets & Heavy Files
-# Prevents pushing massive PlantVillage/PlantDoc image folders
+# =========================================
+# FRONTEND (Next.js Workspace)
+# =========================================
+
+# Dependencies
+frontend/node_modules/
+
+# Next.js build output
+frontend/.next/
+frontend/out/
+
+# Environment variables
+frontend/.env
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
+# Next.js build cache and logs
+frontend/.swc/
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/.pnpm-debug.log*
+
+# Vercel deployment cache
+frontend/.vercel/
+
+# =========================================
+# BACKEND (FastAPI & PyTorch ML Workspace)
+# =========================================
+
+# 1. Python bytecode and cache
+backend/**/__pycache__/
+backend/**/*.py[cod]
+backend/**/$py.class
+
+# 2. Virtual environments
+backend/venv/
+backend/env/
+backend/.venv/
+backend/ENV/
+
+# 3. Secrets and configuration
+backend/.env
+backend/.env.local
+
+# 4. Machine Learning Datasets (PlantVillage, PlantDoc, Mendeley)
+# Ignores all contents but keeps the directory structure intact
 backend/ml_pipeline/data/*
 !backend/ml_pipeline/data/.keep
-*.csv
-*.dat
+!backend/ml_pipeline/data/.gitkeep
 
-# 2. PyTorch Model Weights
-# Prevents pushing exported models loaded by FastAPI
+# 5. PyTorch Model Weights and Checkpoints
 backend/ml_pipeline/weights/*.pth
 backend/ml_pipeline/weights/*.pt
 backend/ml_pipeline/weights/*.onnx
+!backend/ml_pipeline/weights/.keep
+!backend/ml_pipeline/weights/.gitkeep
 
-# 3. Python & Backend Environment
-# Ignores virtual environments and cache
-__pycache__/
-*.py[cod]
-*$py.class
-venv/
-env/
-.venv/
-
-# 4. Secrets & Configuration
-# Ignores your database and Cloud storage secret keys
-.env
-.env.local
-backend/.env
-
-# 5. OS Generated Files
-.DS_Store
-Thumbs.db
+# 6. Unit testing, coverage reports, and logs
+backend/htmlcov/
+backend/.tox/
+backend/.coverage
+backend/.coverage.*
+backend/.pytest_cache/
+backend/*.log

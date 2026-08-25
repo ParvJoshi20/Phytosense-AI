@@ -1,0 +1,10 @@
+{
+  "name": "Phytosense AI",
+  "description": "An HXAI-Powered Intelligent Decision Support System for Tomato Disease Diagnostics featuring 4-layer Explainable AI, interactive Grad-CAM heatmaps, counterfactual reasoning, and contextual treatment plans.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
