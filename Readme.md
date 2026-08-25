@@ -16,13 +16,6 @@ Phytosense AI is an end-to-end, publication-grade diagnostic tool designed to br
 * **Machine Learning Space:** PyTorch, EfficientNetV2, Grad-CAM.
 * **Datasets:** PlantVillage, PlantDoc, Mendeley Data.
 
-## 🚀 Getting Started
-
-To run this project locally, you will need to boot up both the frontend and backend environments in separate terminal windows.
-
-### 1. Backend Setup (FastAPI & PyTorch)
-```bash
-cd backend
-pip install -r requirements.txt
-# Start the FastAPI server
-uvicorn app.api.main:app --reload
+## ✅ Future Tasks: 
+1. Push files into backend folder after training model 
+2. Get approval on UI and make necessary fixes into it
