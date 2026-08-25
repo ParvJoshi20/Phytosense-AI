@@ -1,0 +1,112 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-void: #08080A;
+    --surface-elevated: #121215;
+    --text-primary: #E2E8F0;
+    --text-muted: #828C9E;
+    --phantom-slate: #5B6987;
+    --scanner-blue: #2A7FFF;
+    --status-healthy: #1CEB76;
+    --status-mild: #FDE12D;
+    --status-moderate: #FFB020;
+    --status-severe: #FF2A4D;
+    --frosted-glass: rgba(255, 255, 255, 0.08);
+  }
+}
+
+body {
+  background-color: #08080A;
+  color: #E2E8F0;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Glowing ambiance effects */
+.glow-scanner-blue {
+  box-shadow: 0 0 35px -5px rgba(42, 127, 255, 0.45);
+}
+
+.glow-amber-alert {
+  box-shadow: 0 0 35px -5px rgba(255, 176, 32, 0.45);
+}
+
+.glow-neon-vine {
+  box-shadow: 0 0 35px -5px rgba(28, 235, 118, 0.45);
+}
+
+.glow-crimson-severe {
+  box-shadow: 0 0 35px -5px rgba(255, 42, 77, 0.45);
+}
+
+/* Subtle background grid */
+.bg-grid-void {
+  background-size: 28px 28px;
+  background-image: 
+    linear-gradient(to right, rgba(91, 105, 135, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(91, 105, 135, 0.05) 1px, transparent 1px);
+}
+
+/* Scanner Blue horizontal laser sweep */
+.scanner-laser {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent 0%, #2A7FFF 30%, #70ACFF 50%, #2A7FFF 70%, transparent 100%);
+  box-shadow: 0 0 15px #2A7FFF, 0 0 30px #2A7FFF, 0 0 45px rgba(42, 127, 255, 0.8);
+  animation: laserSweep 2s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate;
+}
+
+@keyframes laserSweep {
+  0% {
+    top: 2%;
+    opacity: 0.85;
+  }
+  100% {
+    top: 96%;
+    opacity: 1;
+  }
+}
+
+/* Pulsing dashed border animation for Idle Dropzone */
+@keyframes borderPulse {
+  0% {
+    border-color: rgba(91, 105, 135, 0.4);
+    box-shadow: 0 0 0 0 rgba(42, 127, 255, 0);
+  }
+  50% {
+    border-color: rgba(42, 127, 255, 0.7);
+    box-shadow: 0 0 25px rgba(42, 127, 255, 0.15);
+  }
+  100% {
+    border-color: rgba(91, 105, 135, 0.4);
+    box-shadow: 0 0 0 0 rgba(42, 127, 255, 0);
+  }
+}
+
+.animate-border-pulse {
+  animation: borderPulse 3s ease-in-out infinite;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: #08080A;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1e2028;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #2A7FFF;
+}
