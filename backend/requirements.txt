@@ -1,0 +1,15 @@
+tensorflow
+numpy
+pandas
+matplotlib
+seaborn
+scikit-learn
+opencv-python
+Pillow
+jupyter
+ipykernel
+grad-cam
+shap
+lime
+fastapi
+uvicorn
