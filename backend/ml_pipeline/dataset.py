@@ -1,14 +1,30 @@
+"""
+PhytoSense AI
+Manifest-based PlantVillage Dataset Pipeline.
+
+The CSV manifest is the single source of truth for the
+train / validation / test split.
+
+The original PlantVillage dataset is never modified.
+"""
+
 from pathlib import Path
 from collections import Counter
 
+import pandas as pd
 import torch
-from torchvision import datasets
-from torch.utils.data import DataLoader
-from timm.data import create_transform
+from PIL import Image
+from torch.utils.data import Dataset, DataLoader
+
+from preprocessing.transforms import (
+    get_train_transform,
+    get_val_transform,
+    get_test_transform,
+)
 
 
 # ============================================================
-# CONFIGURATION
+# EXPECTED CLASSES
 # ============================================================
 
 EXPECTED_CLASSES = [
@@ -25,171 +41,236 @@ EXPECTED_CLASSES = [
 ]
 
 
-# ============================================================
-# TRANSFORMS
-# ============================================================
-
-def get_train_transform(data_config):
-    """
-    Build training preprocessing from the pretrained timm
-    model's data configuration.
-
-    The timm configuration supplies:
-    - input size
-    - interpolation
-    - mean
-    - standard deviation
-
-    Training augmentation remains stochastic.
-    """
-
-    return create_transform(
-        input_size=data_config["input_size"],
-        interpolation=data_config["interpolation"],
-        mean=data_config["mean"],
-        std=data_config["std"],
-        is_training=True,
-        hflip=0.5,
-        vflip=0.0,
-        color_jitter=0.2,
-        auto_augment="rand-m9-mstd0.5-inc1",
-        re_prob=0.0,
-    )
-
-
-def get_val_transform(data_config):
-    """
-    Deterministic preprocessing for validation and test.
-    """
-
-    return create_transform(
-        input_size=data_config["input_size"],
-        interpolation=data_config["interpolation"],
-        mean=data_config["mean"],
-        std=data_config["std"],
-        is_training=False,
-    )
+CLASS_TO_INDEX = {
+    class_name: index
+    for index, class_name in enumerate(EXPECTED_CLASSES)
+}
 
 
 # ============================================================
-# DATASET VALIDATION
+# DATASET
 # ============================================================
 
-def validate_dataset_classes(
-    train_dataset,
-    val_dataset,
-    test_dataset,
-):
+class PlantVillageTomatoDataset(Dataset):
     """
-    Validate that train, validation, and test contain exactly
-    the expected PlantVillage tomato classes and use the same
-    class-to-index mapping.
+    PyTorch Dataset backed by the PlantVillage project manifest.
     """
 
-    expected_class_set = set(EXPECTED_CLASSES)
+    def __init__(
+        self,
+        dataframe,
+        image_root,
+        transform=None,
+    ):
+        self.dataframe = dataframe.reset_index(drop=True)
+        self.image_root = Path(image_root)
+        self.transform = transform
 
-    datasets_to_check = [
-        ("training", train_dataset),
-        ("validation", val_dataset),
-        ("test", test_dataset),
-    ]
-
-    for split_name, dataset in datasets_to_check:
-
-        if set(dataset.classes) != expected_class_set:
-
-            raise RuntimeError(
-                f"{split_name.capitalize()} dataset classes do not "
-                f"match the expected PlantVillage tomato classes.\n\n"
-                f"Expected:\n{EXPECTED_CLASSES}\n\n"
-                f"Found:\n{dataset.classes}"
+        if not self.image_root.exists():
+            raise FileNotFoundError(
+                f"PlantVillage image directory does not exist:\n"
+                f"{self.image_root}"
             )
 
-    if train_dataset.class_to_idx != val_dataset.class_to_idx:
+    def __len__(self):
+        return len(self.dataframe)
 
+    def __getitem__(self, index):
+
+        row = self.dataframe.iloc[index]
+
+        image_path = self.image_root / row["image_path"]
+
+        if not image_path.exists():
+            raise FileNotFoundError(
+                f"Image referenced by manifest does not exist:\n"
+                f"{image_path}"
+            )
+
+        image = Image.open(image_path).convert("RGB")
+
+        label = int(row["class_index"])
+
+        if self.transform is not None:
+            image = self.transform(image)
+
+        return image, label
+
+
+# ============================================================
+# MANIFEST VALIDATION
+# ============================================================
+
+def validate_manifest(manifest):
+    """
+    Validate the structure and class mapping of the manifest.
+    """
+
+    required_columns = {
+        "image_path",
+        "class_name",
+        "class_index",
+        "original_split",
+        "project_split",
+    }
+
+    missing_columns = required_columns - set(manifest.columns)
+
+    if missing_columns:
         raise RuntimeError(
-            "Train and validation class mappings do not match.\n\n"
-            f"Train mapping:\n{train_dataset.class_to_idx}\n\n"
-            f"Validation mapping:\n{val_dataset.class_to_idx}"
+            f"Manifest is missing required columns:\n"
+            f"{sorted(missing_columns)}"
         )
 
-    if train_dataset.class_to_idx != test_dataset.class_to_idx:
+    if manifest.empty:
+        raise RuntimeError("Manifest contains no records.")
 
+    # --------------------------------------------------------
+    # Validate classes
+    # --------------------------------------------------------
+
+    found_classes = set(manifest["class_name"].unique())
+    expected_classes = set(EXPECTED_CLASSES)
+
+    if found_classes != expected_classes:
         raise RuntimeError(
-            "Train and test class mappings do not match.\n\n"
-            f"Train mapping:\n{train_dataset.class_to_idx}\n\n"
-            f"Test mapping:\n{test_dataset.class_to_idx}"
+            "Manifest classes do not match the expected "
+            "PlantVillage tomato classes.\n\n"
+            f"Expected:\n{EXPECTED_CLASSES}\n\n"
+            f"Found:\n{sorted(found_classes)}"
         )
 
-    if len(train_dataset.classes) != len(EXPECTED_CLASSES):
+    # --------------------------------------------------------
+    # Validate class indices
+    # --------------------------------------------------------
 
+    for _, row in manifest.iterrows():
+
+        class_name = row["class_name"]
+        class_index = int(row["class_index"])
+
+        expected_index = CLASS_TO_INDEX[class_name]
+
+        if class_index != expected_index:
+            raise RuntimeError(
+                f"Invalid class mapping:\n"
+                f"{class_name} → {class_index}\n"
+                f"Expected → {expected_index}"
+            )
+
+    # --------------------------------------------------------
+    # Validate project splits
+    # --------------------------------------------------------
+
+    expected_splits = {
+        "train",
+        "val",
+        "test",
+    }
+
+    found_splits = set(
+        manifest["project_split"].unique()
+    )
+
+    if found_splits != expected_splits:
         raise RuntimeError(
-            f"Expected {len(EXPECTED_CLASSES)} classes, "
-            f"but found {len(train_dataset.classes)}."
+            "Manifest project splits are invalid.\n"
+            f"Expected: {expected_splits}\n"
+            f"Found: {found_splits}"
+        )
+
+    # --------------------------------------------------------
+    # Validate duplicate image paths
+    # --------------------------------------------------------
+
+    duplicate_paths = manifest[
+        manifest["image_path"].duplicated()
+    ]
+
+    if not duplicate_paths.empty:
+        raise RuntimeError(
+            f"Manifest contains "
+            f"{len(duplicate_paths)} duplicate image paths."
         )
 
 
 # ============================================================
-# DATASETS
+# DATASET CREATION
 # ============================================================
 
 def create_datasets(
-    data_dir,
-    data_config,
-    train_transform=None,
-    val_transform=None,
+    manifest_path,
+    image_root,
 ):
+    """
+    Create train, validation and test datasets from the
+    project manifest.
+    """
 
-    data_dir = Path(data_dir)
+    manifest_path = Path(manifest_path)
+    image_root = Path(image_root)
 
-    if not data_dir.exists():
-
+    if not manifest_path.exists():
         raise FileNotFoundError(
-            f"Dataset directory does not exist:\n{data_dir}"
+            f"Manifest does not exist:\n{manifest_path}"
         )
 
-    if train_transform is None:
-        train_transform = get_train_transform(data_config)
+    manifest = pd.read_csv(manifest_path)
 
-    if val_transform is None:
-        val_transform = get_val_transform(data_config)
+    validate_manifest(manifest)
 
-    train_dir = data_dir / "train"
-    val_dir = data_dir / "val"
-    test_dir = data_dir / "test"
+    # --------------------------------------------------------
+    # Split manifest
+    # --------------------------------------------------------
 
-    for split_name, split_dir in [
-        ("train", train_dir),
-        ("validation", val_dir),
-        ("test", test_dir),
-    ]:
+    train_df = manifest[
+        manifest["project_split"] == "train"
+    ]
 
-        if not split_dir.exists():
+    val_df = manifest[
+        manifest["project_split"] == "val"
+    ]
 
-            raise FileNotFoundError(
-                f"{split_name.capitalize()} dataset directory "
-                f"does not exist:\n{split_dir}"
-            )
+    test_df = manifest[
+        manifest["project_split"] == "test"
+    ]
 
-    train_dataset = datasets.ImageFolder(
-        train_dir,
+    # --------------------------------------------------------
+    # Transforms
+    # --------------------------------------------------------
+
+    train_transform = get_train_transform(
+        
+    )
+
+    val_transform = get_val_transform(
+        
+    )
+
+    test_transform = get_test_transform(
+        
+    )
+
+    # --------------------------------------------------------
+    # Dataset objects
+    # --------------------------------------------------------
+
+    train_dataset = PlantVillageTomatoDataset(
+        dataframe=train_df,
+        image_root=image_root,
         transform=train_transform,
     )
 
-    val_dataset = datasets.ImageFolder(
-        val_dir,
+    val_dataset = PlantVillageTomatoDataset(
+        dataframe=val_df,
+        image_root=image_root,
         transform=val_transform,
     )
 
-    test_dataset = datasets.ImageFolder(
-        test_dir,
-        transform=val_transform,
-    )
-
-    validate_dataset_classes(
-        train_dataset,
-        val_dataset,
-        test_dataset,
+    test_dataset = PlantVillageTomatoDataset(
+        dataframe=test_df,
+        image_root=image_root,
+        transform=test_transform,
     )
 
     return (
@@ -207,11 +288,20 @@ def create_dataloaders(
     train_dataset,
     val_dataset,
     test_dataset,
-    batch_size=16,
+    batch_size=32,
     num_workers=0,
     generator=None,
     worker_init_fn=None,
 ):
+    """
+    Create PyTorch DataLoaders.
+
+    Train:
+        shuffled
+
+    Validation/Test:
+        deterministic ordering
+    """
 
     pin_memory = torch.cuda.is_available()
 
@@ -253,35 +343,57 @@ def create_dataloaders(
 
 
 # ============================================================
-# CLASS WEIGHTS
+# CLASS DISTRIBUTION
+# ============================================================
+
+def get_class_counts(dataset):
+    """
+    Return training class counts.
+
+    This function should be used with the TRAINING dataset
+    when calculating imbalance statistics.
+    """
+
+    counts = Counter(
+        int(label)
+        for label in dataset.dataframe["class_index"]
+    )
+
+    return {
+        class_index: counts.get(class_index, 0)
+        for class_index in range(len(EXPECTED_CLASSES))
+    }
+
+
+# ============================================================
+# MODERATED CLASS WEIGHTS
 # ============================================================
 
 def get_class_weights(dataset):
     """
     Calculate moderated inverse-frequency class weights.
 
-    Square-root inverse frequency reduces the influence of the
-    majority/minority ratio without allowing rare classes to
-    dominate the loss.
+    Square-root inverse frequency reduces the influence of
+    the majority/minority ratio without allowing rare classes
+    to dominate the loss.
 
-    Weights are calculated ONLY from the training dataset.
+    IMPORTANT:
+        Weights are calculated ONLY from the training dataset.
     """
 
-    counts = Counter(dataset.targets)
-
-    total = len(dataset)
-    num_classes = len(dataset.classes)
+    counts = get_class_counts(dataset)
 
     weights = []
 
-    for class_index in range(num_classes):
+    for class_index in range(
+        len(EXPECTED_CLASSES)
+    ):
 
         count = counts[class_index]
 
         if count == 0:
-
             raise RuntimeError(
-                f"Class index {class_index} contains "
+                f"Class index {class_index} has "
                 f"zero training samples."
             )
 
@@ -294,7 +406,7 @@ def get_class_weights(dataset):
         dtype=torch.float32,
     )
 
-    # Normalize so the average class weight is 1.
+    # Normalize so mean class weight = 1.
     weights = weights / weights.mean()
 
     return weights
