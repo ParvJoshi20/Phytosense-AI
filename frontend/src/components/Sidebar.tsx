@@ -207,14 +207,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </motion.button>
         )}
 
-        <motion.button
-          whileTap={{ scale: 0.96 }}
-          onClick={onOpenAgronomist}
-          className="w-full py-2 px-3 rounded-xl bg-[#2A7FFF]/10 hover:bg-[#2A7FFF]/20 border border-[#2A7FFF]/40 text-[#2A7FFF] text-xs font-semibold flex items-center justify-center gap-2 transition-all shadow-sm"
-        >
-          <Bot className="w-4 h-4" />
-          <span>Ask AI Agronomist</span>
-        </motion.button>
+        
 
         <div className="flex items-center justify-between text-[10px] font-mono text-[#828C9E] pt-1 px-1">
           <span className="flex items-center gap-1.5">
