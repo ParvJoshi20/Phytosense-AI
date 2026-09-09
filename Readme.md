@@ -1,21 +1,102 @@
-# Phytosense AI 🌱
+# PhytoSense AI 🌱
 
-> **An HXAI-Powered Intelligent Decision Support System for Tomato Disease Diagnostics.**
+> Current ML workflow and development progress for PhytoSense AI.
 
-Phytosense AI is an end-to-end, publication-grade diagnostic tool designed to bridge the gap between complex deep learning models and actionable agricultural interventions. It moves beyond "black-box" classification by employing a Human-Centric Explainable AI (HXAI) approach.
+---
 
-## 🧠 The 4-Layer HXAI Architecture
-1. **Layer 1: Disease Detection & Severity** - High-accuracy classification across a 4-tier spectrum (Healthy, Mild, Moderate, Severe) with calibrated confidence scoring.
-2. **Layer 2: Visual Explainability** - Interactive Grad-CAM heatmaps highlighting the exact morphological features driving the model's prediction.
-3. **Layer 3: Natural Language Reasoning** - "Why this prediction?" and "Why not another disease?" counterfactual explanations mapping latent features to human-readable symptoms.
-4. **Layer 4: Decision Support** - Contextualized, actionable treatment plans broken down into immediate, organic, and chemical interventions.
+## 📁 Current Project Structure
 
-## 🛠 Tech Stack
-* **Frontend Space:** Next.js, Tailwind CSS, Framer Motion (Deep dark-mode UI with reactive state-driven lighting).
-* **Backend Space:** FastAPI, Python, PostgreSQL.
-* **Machine Learning Space:** PyTorch, EfficientNetV2, Grad-CAM.
-* **Datasets:** PlantVillage, PlantDoc, Mendeley Data.
+```text
+backend/
+└── ml_pipeline/
+    │
+    ├── audit_dataset.py
+    ├── config.py
+    ├── dataset.py
+    ├── evaluate.py
+    ├── prepare_plantvillage.py
+    ├── requirements.txt
+    ├── test_dataset.py
+    │
+    ├── manifests/
+    │   └── plantvillage_tomato_split.csv
+    │
+    ├── models/
+    │   └── efficientnetv2.py
+    │
+    └── preprocessing/
+        └── transforms.py
+```
+---
 
-## ✅ Future Tasks: 
-1. Push files into backend folder after training model 
-2. Get approval on UI and make necessary fixes into it
+## ✅ Current ML Pipeline Status
+
+```md
+[x] PlantVillage tomato dataset verified
+[x] 10 tomato disease/healthy classes verified
+[x] Reproducible 70/15/15 train/validation/test split
+[x] Dataset integrity and leakage audit
+[x] Dataset manifest generated
+[x] Image preprocessing pipeline implemented
+[x] Dataset and DataLoader pipeline implemented
+[x] Class distribution verified
+[x] Moderated class weights implemented
+[x] Dataset/DataLoader smoke test passed
+[ ] EfficientNetV2-B0 model implementation prepared
+[ ] Final model configuration
+[ ] Model training
+[ ] Model evaluation
+[ ] Grad-CAM
+[ ] SHAP
+```
+
+---
+
+## 🛣️ Development Roadmap
+
+```text
+Dataset Preparation
+        ↓
+Preprocessing
+        ↓
+Dataset / DataLoader Validation
+        ↓
+Model Configuration
+        ↓
+Model Training
+        ↓
+Model Evaluation
+        ↓
+Grad-CAM + SHAP
+        ↓
+Final ML Pipeline
+```
+
+---
+
+## 🔬 Research Direction
+
+The current ML pipeline establishes a reproducible baseline using:
+
+* PlantVillage tomato images
+* Controlled 70/15/15 dataset splitting
+* Modern image preprocessing
+* Class-imbalance handling
+* Pretrained deep learning
+* Validation-based model selection
+* Independent test evaluation
+* Explainable AI analysis
+
+This baseline will support further experimentation and the research paper.
+
+---
+
+## 📌 Current Status
+
+**Current Phase: Model Configuration**
+
+Dataset preparation, preprocessing, and Dataset/DataLoader validation have been completed successfully.
+
+The next step is to finalize the model configuration and training strategy before beginning the first full training run.
+
+---

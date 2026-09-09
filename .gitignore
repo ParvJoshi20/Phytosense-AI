@@ -30,6 +30,9 @@ frontend/.pnpm-debug.log*
 # Vercel deployment cache
 frontend/.vercel/
 
+# Extras
+.history/
+
 # =========================================
 # BACKEND (FastAPI & PyTorch ML Workspace)
 # =========================================
