@@ -1,6 +1,29 @@
+"""
+PhytoSense AI
+Preprocessing smoke test.
+
+This test checks that the preprocessing transforms for training, validation, and testing are working correctly. 
+
+Real PlantVillage image
+        ↓
+       PIL
+        ↓
+   RGB conversion
+        ↓
+ ┌──────┼──────┐
+ ↓      ↓      ↓
+Train   Val   Test
+ ↓      ↓      ↓
+Tensor Tensor Tensor
+ ↓      ↓      ↓
+3 × 224 × 224
+
+The test must pass before model training begins.
+"""
+
 from PIL import Image
 
-from preprocessing.transforms import (
+from backend.ml_pipeline.dataset.transforms import (
     get_train_transform,
     get_val_transform,
     get_test_transform,

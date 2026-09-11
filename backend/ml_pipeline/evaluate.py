@@ -8,7 +8,7 @@ from sklearn.metrics import classification_report, confusion_matrix
 
 from backend.ml_pipeline.dataset import create_datasets
 from backend.ml_pipeline.models.efficientnetv2 import create_model
-from backend.ml_pipeline.preprocessing.transforms import get_val_transform
+from backend.ml_pipeline.dataset.transforms import get_val_transform
 
 
 BASE_DIR = Path(__file__).resolve().parents[2]
