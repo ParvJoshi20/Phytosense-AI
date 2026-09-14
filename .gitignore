@@ -51,21 +51,18 @@ backend/ENV/
 # 3. Secrets and configuration
 backend/.env
 backend/.env.local
+# ML Pipeline local environment
+backend/ml_pipeline/.env
+backend/ml_pipeline/.env.example
 
-# 4. Machine Learning Datasets (PlantVillage, PlantDoc, Mendeley)
-# Ignores all contents but keeps the directory structure intact
-backend/ml_pipeline/data/*
-!backend/ml_pipeline/data/.keep
-!backend/ml_pipeline/data/.gitkeep
-
-# 5. PyTorch Model Weights and Checkpoints
+# 4. PyTorch Model Weights and Checkpoints
 backend/ml_pipeline/weights/*.pth
 backend/ml_pipeline/weights/*.pt
 backend/ml_pipeline/weights/*.onnx
 !backend/ml_pipeline/weights/.keep
 !backend/ml_pipeline/weights/.gitkeep
 
-# 6. Unit testing, coverage reports, and logs
+# 5. Unit testing, coverage reports, and logs
 backend/htmlcov/
 backend/.tox/
 backend/.coverage

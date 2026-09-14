@@ -24,7 +24,7 @@ from config import (
     PLANTVILLAGE_ROOT,
 )
 
-from backend.ml_pipeline.dataset.dataset import (
+from dataset.dataset import (
     create_datasets,
     create_dataloaders,
     get_class_counts,

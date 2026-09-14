@@ -23,7 +23,7 @@ The test must pass before model training begins.
 
 from PIL import Image
 
-from backend.ml_pipeline.dataset.transforms import (
+from dataset.transforms import (
     get_train_transform,
     get_val_transform,
     get_test_transform,
