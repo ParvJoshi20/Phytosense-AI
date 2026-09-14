@@ -16,7 +16,7 @@ import torch
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader
 
-from preprocessing.transforms import (
+from dataset.transforms import (
     get_train_transform,
     get_val_transform,
     get_test_transform,

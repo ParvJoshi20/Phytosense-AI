@@ -1,55 +1,97 @@
+"""
+PhytoSense AI
+Model Training Pipeline.
+
+Training flow:
+
+    Manifest
+        ↓
+    Dataset
+        ↓
+    Preprocessing
+        ↓
+    DataLoader
+        ↓
+    EfficientNetV2-B0
+        ↓
+    Weighted Cross-Entropy Loss
+        ↓
+    Validation
+        ↓
+    Macro F1
+        ↓
+    Checkpoint / Early Stopping
+
+The test set is NOT used during training.
+It is reserved for final evaluation.
+"""
+
 from pathlib import Path
+import json
 import random
-import time
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import timm
 
-from sklearn.metrics import f1_score
+from config import (
+    ML_PIPELINE_ROOT,
+    TOMATO_MANIFEST,
+    COLOR_ROOT,
+    NUM_CLASSES,
+    TOMATO_CLASSES,
+    RANDOM_SEED,
+)
 
-from dataset import (
+from dataset.dataset import (
     create_datasets,
     create_dataloaders,
     get_class_weights,
 )
 
+from models.efficientnetv2 import (
+    create_model,
+)
+
 
 # ============================================================
-# CONFIGURATION
+# TRAINING CONFIGURATION
 # ============================================================
 
-BASE_DIR = Path(__file__).resolve().parent
+BATCH_SIZE = 32
 
-DATA_DIR = BASE_DIR / "data" / "plantvillage_tomato"
-
-WEIGHTS_DIR = BASE_DIR / "weights"
-
-LAST_CHECKPOINT = WEIGHTS_DIR / "efficientnetv2_last.pth"
-BEST_CHECKPOINT = WEIGHTS_DIR / "efficientnetv2_best.pth"
-
-TOTAL_EPOCHS = 150
+MAX_EPOCHS = 150
 
 EARLY_STOPPING_PATIENCE = 10
-
-BATCH_SIZE = 16
-
-NUM_WORKERS = 0
 
 LEARNING_RATE = 1e-4
 
 WEIGHT_DECAY = 1e-4
 
-NUM_CLASSES = 10
-
-MODEL_NAME = "tf_efficientnetv2_b0"
-
-SEED = 42
+NUM_WORKERS = 0
 
 DEVICE = torch.device(
     "cuda" if torch.cuda.is_available() else "cpu"
+)
+
+
+# ============================================================
+# CHECKPOINT / OUTPUT PATHS
+# ============================================================
+
+WEIGHTS_DIR = ML_PIPELINE_ROOT / "weights"
+
+BEST_CHECKPOINT_PATH = (
+    WEIGHTS_DIR / "efficientnetv2_best.pth"
+)
+
+LAST_CHECKPOINT_PATH = (
+    WEIGHTS_DIR / "efficientnetv2_last.pth"
+)
+
+HISTORY_PATH = (
+    WEIGHTS_DIR / "training_history.json"
 )
 
 
@@ -59,7 +101,7 @@ DEVICE = torch.device(
 
 def set_seed(seed):
     """
-    Configure reproducible random number generation.
+    Configure random seeds for reproducible training.
     """
 
     random.seed(seed)
@@ -69,182 +111,94 @@ def set_seed(seed):
     torch.manual_seed(seed)
 
     if torch.cuda.is_available():
-
         torch.cuda.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
 
-    # Request deterministic behavior where supported.
+    # Deterministic behaviour is preferred for reproducibility.
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-    try:
-        torch.use_deterministic_algorithms(True)
-    except Exception:
-        pass
-
-
-def seed_worker(worker_id):
-    """
-    Seed individual DataLoader workers.
-    """
-
-    worker_seed = torch.initial_seed() % (2 ** 32)
-
-    np.random.seed(worker_seed)
-
-    random.seed(worker_seed)
-
 
 # ============================================================
-# MODEL
+# MACRO F1
 # ============================================================
 
-def create_model():
-
-    model = timm.create_model(
-        MODEL_NAME,
-        pretrained=True,
-        num_classes=NUM_CLASSES,
-    )
-
-    return model
-
-
-# ============================================================
-# CHECKPOINT SAVE
-# ============================================================
-
-def save_checkpoint(
-    path,
-    epoch,
-    model,
-    optimizer,
-    scheduler,
-    best_val_macro_f1,
-    epochs_without_improvement,
-    classes,
-    history,
+def calculate_macro_f1(
+    predictions,
+    targets,
+    num_classes,
 ):
+    """
+    Calculate macro F1 without requiring an additional
+    sklearn dependency.
 
-    checkpoint = {
-        "epoch": epoch,
+    F1 is calculated independently for every class and
+    then averaged equally across all classes.
+    """
 
-        "model_state_dict":
-            model.state_dict(),
+    predictions = np.asarray(predictions)
+    targets = np.asarray(targets)
 
-        "optimizer_state_dict":
-            optimizer.state_dict(),
+    f1_scores = []
 
-        "scheduler_state_dict":
-            scheduler.state_dict(),
+    for class_index in range(num_classes):
 
-        "best_val_macro_f1":
-            best_val_macro_f1,
+        true_positive = np.sum(
+            (predictions == class_index)
+            & (targets == class_index)
+        )
 
-        "epochs_without_improvement":
-            epochs_without_improvement,
+        false_positive = np.sum(
+            (predictions == class_index)
+            & (targets != class_index)
+        )
 
-        "classes":
-            classes,
+        false_negative = np.sum(
+            (predictions != class_index)
+            & (targets == class_index)
+        )
 
-        "history":
-            history,
+        precision_denominator = (
+            true_positive + false_positive
+        )
 
-        "seed":
-            SEED,
+        recall_denominator = (
+            true_positive + false_negative
+        )
 
-        "model_name":
-            MODEL_NAME,
+        if precision_denominator == 0:
+            precision = 0.0
+        else:
+            precision = (
+                true_positive
+                / precision_denominator
+            )
 
-        "num_classes":
-            NUM_CLASSES,
+        if recall_denominator == 0:
+            recall = 0.0
+        else:
+            recall = (
+                true_positive
+                / recall_denominator
+            )
 
-        "batch_size":
-            BATCH_SIZE,
+        if precision + recall == 0:
+            f1 = 0.0
+        else:
+            f1 = (
+                2.0
+                * precision
+                * recall
+                / (precision + recall)
+            )
 
-        "learning_rate":
-            LEARNING_RATE,
+        f1_scores.append(f1)
 
-        "weight_decay":
-            WEIGHT_DECAY,
-    }
-
-    torch.save(
-        checkpoint,
-        path,
-    )
-
-
-# ============================================================
-# CHECKPOINT LOAD
-# ============================================================
-
-def load_checkpoint(
-    path,
-    model,
-    optimizer,
-    scheduler,
-    device,
-):
-
-    checkpoint = torch.load(
-        path,
-        map_location=device,
-        weights_only=False,
-    )
-
-    model.load_state_dict(
-        checkpoint["model_state_dict"]
-    )
-
-    optimizer.load_state_dict(
-        checkpoint["optimizer_state_dict"]
-    )
-
-    scheduler.load_state_dict(
-        checkpoint["scheduler_state_dict"]
-    )
-
-    start_epoch = checkpoint["epoch"] + 1
-
-    best_val_macro_f1 = checkpoint.get(
-        "best_val_macro_f1",
-        0.0,
-    )
-
-    epochs_without_improvement = checkpoint.get(
-        "epochs_without_improvement",
-        0,
-    )
-
-    history = checkpoint.get(
-        "history",
-        {
-            "train_loss": [],
-            "train_accuracy": [],
-            "val_loss": [],
-            "val_accuracy": [],
-            "val_macro_f1": [],
-            "learning_rate": [],
-        },
-    )
-
-    classes = checkpoint.get(
-        "classes",
-        None,
-    )
-
-    return (
-        start_epoch,
-        best_val_macro_f1,
-        epochs_without_improvement,
-        history,
-        classes,
-    )
+    return float(np.mean(f1_scores))
 
 
 # ============================================================
-# TRAIN ONE EPOCH
+# TRAINING EPOCH
 # ============================================================
 
 def train_one_epoch(
@@ -254,20 +208,28 @@ def train_one_epoch(
     optimizer,
     device,
 ):
+    """
+    Train the model for one complete epoch.
+    """
 
     model.train()
 
     running_loss = 0.0
 
-    correct = 0
-
-    total = 0
+    all_predictions = []
+    all_targets = []
 
     for images, labels in loader:
 
-        images = images.to(device)
+        images = images.to(
+            device,
+            non_blocking=True,
+        )
 
-        labels = labels.to(device)
+        labels = labels.to(
+            device,
+            non_blocking=True,
+        )
 
         optimizer.zero_grad(
             set_to_none=True
@@ -289,104 +251,208 @@ def train_one_epoch(
             * images.size(0)
         )
 
-        predictions = outputs.argmax(
-            dim=1
+        predictions = (
+            outputs.argmax(dim=1)
         )
 
-        correct += (
-            predictions == labels
-        ).sum().item()
+        all_predictions.extend(
+            predictions.detach()
+            .cpu()
+            .numpy()
+        )
 
-        total += labels.size(0)
+        all_targets.extend(
+            labels.detach()
+            .cpu()
+            .numpy()
+        )
 
-    epoch_loss = running_loss / total
+    epoch_loss = (
+        running_loss
+        / len(loader.dataset)
+    )
 
-    epoch_accuracy = correct / total
+    all_predictions = np.asarray(
+        all_predictions
+    )
+
+    all_targets = np.asarray(
+        all_targets
+    )
+
+    accuracy = float(
+        np.mean(
+            all_predictions
+            == all_targets
+        )
+    )
+
+    macro_f1 = calculate_macro_f1(
+        all_predictions,
+        all_targets,
+        NUM_CLASSES,
+    )
 
     return (
         epoch_loss,
-        epoch_accuracy,
+        accuracy,
+        macro_f1,
     )
 
 
 # ============================================================
-# VALIDATION
+# VALIDATION EPOCH
 # ============================================================
 
-def validate(
+@torch.no_grad()
+def validate_one_epoch(
     model,
     loader,
-    loss_criterion,
+    criterion,
     device,
 ):
+    """
+    Evaluate the model on the validation set.
+
+    Validation uses an UNWEIGHTED loss because class weights
+    are intended to influence optimization, not evaluation.
+    """
 
     model.eval()
 
     running_loss = 0.0
 
-    correct = 0
-
-    total = 0
-
     all_predictions = []
+    all_targets = []
 
-    all_labels = []
+    for images, labels in loader:
 
-    with torch.no_grad():
+        images = images.to(
+            device,
+            non_blocking=True,
+        )
 
-        for images, labels in loader:
+        labels = labels.to(
+            device,
+            non_blocking=True,
+        )
 
-            images = images.to(device)
+        outputs = model(images)
 
-            labels = labels.to(device)
+        loss = criterion(
+            outputs,
+            labels,
+        )
 
-            outputs = model(images)
+        running_loss += (
+            loss.item()
+            * images.size(0)
+        )
 
-            # IMPORTANT:
-            # Validation loss is intentionally UNWEIGHTED.
-            loss = loss_criterion(
-                outputs,
-                labels,
-            )
+        predictions = (
+            outputs.argmax(dim=1)
+        )
 
-            running_loss += (
-                loss.item()
-                * images.size(0)
-            )
+        all_predictions.extend(
+            predictions.cpu().numpy()
+        )
 
-            predictions = outputs.argmax(
-                dim=1
-            )
+        all_targets.extend(
+            labels.cpu().numpy()
+        )
 
-            correct += (
-                predictions == labels
-            ).sum().item()
+    epoch_loss = (
+        running_loss
+        / len(loader.dataset)
+    )
 
-            total += labels.size(0)
+    all_predictions = np.asarray(
+        all_predictions
+    )
 
-            all_predictions.extend(
-                predictions.cpu().numpy()
-            )
+    all_targets = np.asarray(
+        all_targets
+    )
 
-            all_labels.extend(
-                labels.cpu().numpy()
-            )
+    accuracy = float(
+        np.mean(
+            all_predictions
+            == all_targets
+        )
+    )
 
-    epoch_loss = running_loss / total
-
-    epoch_accuracy = correct / total
-
-    epoch_macro_f1 = f1_score(
-        all_labels,
+    macro_f1 = calculate_macro_f1(
         all_predictions,
-        average="macro",
-        zero_division=0,
+        all_targets,
+        NUM_CLASSES,
     )
 
     return (
         epoch_loss,
-        epoch_accuracy,
-        epoch_macro_f1,
+        accuracy,
+        macro_f1,
+    )
+
+
+# ============================================================
+# CHECKPOINT
+# ============================================================
+
+def save_checkpoint(
+    path,
+    model,
+    optimizer,
+    scheduler,
+    epoch,
+    best_val_macro_f1,
+    history,
+):
+    """
+    Save all important training state required for
+    reproducibility and future resumption.
+    """
+
+    checkpoint = {
+        "epoch": epoch,
+
+        "model_state_dict":
+            model.state_dict(),
+
+        "optimizer_state_dict":
+            optimizer.state_dict(),
+
+        "scheduler_state_dict":
+            scheduler.state_dict(),
+
+        "best_val_macro_f1":
+            best_val_macro_f1,
+
+        "class_names":
+            TOMATO_CLASSES,
+
+        "num_classes":
+            NUM_CLASSES,
+
+        "history":
+            history,
+
+        "training_config": {
+            "batch_size": BATCH_SIZE,
+            "max_epochs": MAX_EPOCHS,
+            "early_stopping_patience":
+                EARLY_STOPPING_PATIENCE,
+            "learning_rate":
+                LEARNING_RATE,
+            "weight_decay":
+                WEIGHT_DECAY,
+            "random_seed":
+                RANDOM_SEED,
+        },
+    }
+
+    torch.save(
+        checkpoint,
+        path,
     )
 
 
@@ -396,191 +462,222 @@ def validate(
 
 def main():
 
-    set_seed(SEED)
-
     print("=" * 70)
-    print("PHYTO-SENSE AI - EFFICIENTNETV2-B0")
+    print("PHYTOSENSE AI — MODEL TRAINING")
     print("=" * 70)
 
-    print("Device:", DEVICE)
-
-    print("Model:", MODEL_NAME)
-
-    print("Dataset:", DATA_DIR)
-
-    print("Maximum epochs:", TOTAL_EPOCHS)
-
-    print(
-        "Early stopping patience:",
-        EARLY_STOPPING_PATIENCE,
-    )
-
-    print("Batch size:", BATCH_SIZE)
-
-    print("Seed:", SEED)
-
-    WEIGHTS_DIR.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
     # --------------------------------------------------------
-    # MODEL
+    # Reproducibility
     # --------------------------------------------------------
 
-    print()
-    print("Creating EfficientNetV2-B0...")
-
-    model = create_model()
-
-    model = model.to(DEVICE)
-
-    parameters = sum(
-        p.numel()
-        for p in model.parameters()
-    )
-
-    print(
-        f"Parameters: {parameters:,}"
-    )
+    set_seed(RANDOM_SEED)
 
     # --------------------------------------------------------
-    # TIMM PRETRAINED DATA CONFIG
+    # Device
     # --------------------------------------------------------
 
-    data_config = timm.data.resolve_data_config(
-        {},
-        model=model,
-    )
+    print("\nDEVICE")
+    print("-" * 70)
 
-    print()
-    print("Pretrained model data configuration:")
+    print(f"Using device: {DEVICE}")
 
-    print(
-        "Input size:",
-        data_config["input_size"],
-    )
-
-    print(
-        "Interpolation:",
-        data_config["interpolation"],
-    )
-
-    print(
-        "Mean:",
-        data_config["mean"],
-    )
-
-    print(
-        "Std:",
-        data_config["std"],
-    )
-
-    # --------------------------------------------------------
-    # DATASET
-    # --------------------------------------------------------
-
-    print()
-    print("Loading datasets...")
-
-    train_dataset, val_dataset, test_dataset = create_datasets(
-        DATA_DIR,
-        data_config=data_config,
-    )
-
-    print(
-        "Train:",
-        len(train_dataset),
-    )
-
-    print(
-        "Validation:",
-        len(val_dataset),
-    )
-
-    print(
-        "Test:",
-        len(test_dataset),
-    )
-
-    print()
-    print("Classes:")
-
-    for i, name in enumerate(
-        train_dataset.classes
-    ):
-
+    if DEVICE.type == "cuda":
         print(
-            f"{i}: {name}"
-        )
-
-    if len(train_dataset.classes) != NUM_CLASSES:
-
-        raise RuntimeError(
-            f"Expected {NUM_CLASSES} classes, "
-            f"but dataset contains "
-            f"{len(train_dataset.classes)} classes."
+            f"GPU: {torch.cuda.get_device_name(0)}"
         )
 
     # --------------------------------------------------------
-    # DATALOADER
+    # Dataset information
     # --------------------------------------------------------
 
-    loader_generator = torch.Generator()
+    print("\nDATASET")
+    print("-" * 70)
 
-    loader_generator.manual_seed(
-        SEED
+    print(
+        f"Manifest: {TOMATO_MANIFEST}"
     )
 
-    (
-        train_loader,
-        val_loader,
-        test_loader,
-    ) = create_dataloaders(
-        train_dataset,
-        val_dataset,
-        test_dataset,
-        batch_size=BATCH_SIZE,
-        num_workers=NUM_WORKERS,
-        generator=loader_generator,
-        worker_init_fn=seed_worker,
+    print(
+        f"Image root: {COLOR_ROOT}"
+    )
+
+    print(
+        f"Classes: {NUM_CLASSES}"
+    )
+
+    print(
+        f"Train / Val / Test: "
+        f"70 / 15 / 15"
     )
 
     # --------------------------------------------------------
-    # CLASS WEIGHTS
+    # Training configuration
     # --------------------------------------------------------
+
+    print("\nTRAINING CONFIGURATION")
+    print("-" * 70)
+
+    print(
+        "Model: EfficientNetV2-B0"
+    )
+
+    print(
+        "Pretrained: ImageNet"
+    )
+
+    print(
+        f"Batch size: {BATCH_SIZE}"
+    )
+
+    print(
+        f"Maximum epochs: {MAX_EPOCHS}"
+    )
+
+    print(
+        f"Early stopping patience: "
+        f"{EARLY_STOPPING_PATIENCE}"
+    )
+
+    print(
+        f"Learning rate: {LEARNING_RATE}"
+    )
+
+    print(
+        f"Weight decay: {WEIGHT_DECAY}"
+    )
+
+    # --------------------------------------------------------
+    # Create datasets
+    # --------------------------------------------------------
+
+    print("\nCREATING DATASETS")
+    print("-" * 70)
+
+    train_dataset, val_dataset, test_dataset = (
+        create_datasets(
+            manifest_path=TOMATO_MANIFEST,
+            image_root=COLOR_ROOT,
+        )
+    )
+
+    print("✓ Datasets created.")
+
+    print(
+        f"Train: {len(train_dataset)}"
+    )
+
+    print(
+        f"Val:   {len(val_dataset)}"
+    )
+
+    print(
+        f"Test:  {len(test_dataset)}"
+    )
+
+    # --------------------------------------------------------
+    # Create DataLoaders
+    # --------------------------------------------------------
+
+    print("\nCREATING DATALOADERS")
+    print("-" * 70)
+
+    train_loader, val_loader, test_loader = (
+        create_dataloaders(
+            train_dataset=train_dataset,
+            val_dataset=val_dataset,
+            test_dataset=test_dataset,
+            batch_size=BATCH_SIZE,
+            num_workers=NUM_WORKERS,
+        )
+    )
+
+    print("✓ DataLoaders created.")
+
+    print(
+        f"Train batches: {len(train_loader)}"
+    )
+
+    print(
+        f"Val batches:   {len(val_loader)}"
+    )
+
+    print(
+        f"Test batches:  {len(test_loader)}"
+    )
+
+    # --------------------------------------------------------
+    # Class weights
+    # --------------------------------------------------------
+
+    print("\nCLASS WEIGHTS")
+    print("-" * 70)
 
     class_weights = get_class_weights(
         train_dataset
     ).to(DEVICE)
 
-    print()
-    print("Training class weights:")
-
-    for name, weight in zip(
-        train_dataset.classes,
-        class_weights,
+    for index, weight in enumerate(
+        class_weights
     ):
-
         print(
-            f"{name:50} "
+            f"{index:2d} | "
+            f"{TOMATO_CLASSES[index]:55s} | "
             f"{weight.item():.4f}"
         )
 
+    print(
+        f"\nMean weight: "
+        f"{class_weights.mean().item():.4f}"
+    )
+
     # --------------------------------------------------------
-    # LOSS FUNCTIONS
+    # Model
     # --------------------------------------------------------
 
-    # Weighted loss is used ONLY for training.
+    print("\nMODEL")
+    print("-" * 70)
+
+    model = create_model(
+        num_classes=NUM_CLASSES,
+        pretrained=True,
+    )
+
+    model = model.to(DEVICE)
+
+    print(
+        "✓ EfficientNetV2-B0 created."
+    )
+
+    print(
+        f"✓ Output classes: "
+        f"{NUM_CLASSES}"
+    )
+
+    # --------------------------------------------------------
+    # Loss functions
+    # --------------------------------------------------------
+
+    print("\nLOSS")
+    print("-" * 70)
+
     train_criterion = nn.CrossEntropyLoss(
         weight=class_weights
     )
 
-    # Unweighted loss is used for validation.
     val_criterion = nn.CrossEntropyLoss()
 
+    print(
+        "✓ Training: weighted "
+        "CrossEntropyLoss"
+    )
+
+    print(
+        "✓ Validation: unweighted "
+        "CrossEntropyLoss"
+    )
+
     # --------------------------------------------------------
-    # OPTIMIZER
+    # Optimizer
     # --------------------------------------------------------
 
     optimizer = optim.AdamW(
@@ -590,397 +687,285 @@ def main():
     )
 
     # --------------------------------------------------------
-    # SCHEDULER
+    # Scheduler
     # --------------------------------------------------------
 
-    # Scheduler monitors validation macro F1 because
-    # macro F1 gives every class equal importance.
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer,
         mode="max",
-        factor=0.3,
+        factor=0.5,
         patience=3,
-        min_lr=1e-7,
     )
 
     # --------------------------------------------------------
-    # TRAINING STATE
+    # Output directory
     # --------------------------------------------------------
 
-    start_epoch = 1
+    WEIGHTS_DIR.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
-    best_val_macro_f1 = 0.0
-
-    epochs_without_improvement = 0
+    # --------------------------------------------------------
+    # Training history
+    # --------------------------------------------------------
 
     history = {
         "train_loss": [],
         "train_accuracy": [],
+        "train_macro_f1": [],
         "val_loss": [],
         "val_accuracy": [],
         "val_macro_f1": [],
         "learning_rate": [],
     }
 
-    # --------------------------------------------------------
-    # RESUME CHECKPOINT
-    # --------------------------------------------------------
+    best_val_macro_f1 = -float("inf")
 
-    if LAST_CHECKPOINT.exists():
-
-        print()
-        print("=" * 70)
-        print("CHECKPOINT FOUND")
-        print("=" * 70)
-
-        print(
-            "Loading:",
-            LAST_CHECKPOINT,
-        )
-
-        (
-            start_epoch,
-            best_val_macro_f1,
-            epochs_without_improvement,
-            history,
-            checkpoint_classes,
-        ) = load_checkpoint(
-            LAST_CHECKPOINT,
-            model,
-            optimizer,
-            scheduler,
-            DEVICE,
-        )
-
-        print(
-            "Last completed epoch:",
-            start_epoch - 1,
-        )
-
-        print(
-            "Next epoch:",
-            start_epoch,
-        )
-
-        print(
-            f"Best validation macro F1: "
-            f"{best_val_macro_f1:.4f} "
-            f"({best_val_macro_f1 * 100:.2f}%)"
-        )
-
-        print(
-            "Epochs without improvement:",
-            epochs_without_improvement,
-        )
-
-        if checkpoint_classes is not None:
-
-            if checkpoint_classes != train_dataset.classes:
-
-                raise RuntimeError(
-                    "Checkpoint class order does not "
-                    "match dataset class order."
-                )
-
-        if start_epoch > TOTAL_EPOCHS:
-
-            print()
-            print(
-                "Training is already complete."
-            )
-
-            return
-
-    else:
-
-        print()
-        print(
-            "No checkpoint found."
-        )
-
-        print(
-            "Starting training from epoch 1."
-        )
+    epochs_without_improvement = 0
 
     # --------------------------------------------------------
-    # TRAINING
+    # Training loop
     # --------------------------------------------------------
 
-    print()
+    print("\n")
     print("=" * 70)
-    print("TRAINING")
+    print("STARTING TRAINING")
     print("=" * 70)
 
-    try:
+    for epoch in range(
+        1,
+        MAX_EPOCHS + 1,
+    ):
 
-        for epoch in range(
-            start_epoch,
-            TOTAL_EPOCHS + 1,
-        ):
+        current_lr = optimizer.param_groups[0][
+            "lr"
+        ]
 
-            epoch_start = time.time()
+        # ----------------------------------------------------
+        # Train
+        # ----------------------------------------------------
 
-            print(
-                f"Epoch {epoch}/{TOTAL_EPOCHS}"
+        train_loss, train_accuracy, train_macro_f1 = (
+            train_one_epoch(
+                model=model,
+                loader=train_loader,
+                criterion=train_criterion,
+                optimizer=optimizer,
+                device=DEVICE,
             )
+        )
 
-            print("-" * 70)
+        # ----------------------------------------------------
+        # Validation
+        # ----------------------------------------------------
 
-            # ------------------------------------------------
-            # TRAIN
-            # ------------------------------------------------
-
-            (
-                train_loss,
-                train_accuracy,
-            ) = train_one_epoch(
-                model,
-                train_loader,
-                train_criterion,
-                optimizer,
-                DEVICE,
+        val_loss, val_accuracy, val_macro_f1 = (
+            validate_one_epoch(
+                model=model,
+                loader=val_loader,
+                criterion=val_criterion,
+                device=DEVICE,
             )
+        )
 
-            # ------------------------------------------------
-            # VALIDATION
-            # ------------------------------------------------
+        # ----------------------------------------------------
+        # Scheduler
+        # ----------------------------------------------------
 
-            (
-                val_loss,
-                val_accuracy,
-                val_macro_f1,
-            ) = validate(
-                model,
-                val_loader,
-                val_criterion,
-                DEVICE,
-            )
+        scheduler.step(
+            val_macro_f1
+        )
 
-            # ------------------------------------------------
-            # LEARNING RATE / SCHEDULER
-            # ------------------------------------------------
+        # ----------------------------------------------------
+        # History
+        # ----------------------------------------------------
 
-            current_lr = (
-                optimizer.param_groups[0]["lr"]
-            )
+        history["train_loss"].append(
+            train_loss
+        )
 
-            scheduler.step(
-                val_macro_f1
-            )
+        history["train_accuracy"].append(
+            train_accuracy
+        )
 
-            # ------------------------------------------------
-            # HISTORY
-            # ------------------------------------------------
+        history["train_macro_f1"].append(
+            train_macro_f1
+        )
 
-            history["train_loss"].append(
-                train_loss
-            )
+        history["val_loss"].append(
+            val_loss
+        )
 
-            history["train_accuracy"].append(
-                train_accuracy
-            )
+        history["val_accuracy"].append(
+            val_accuracy
+        )
 
-            history["val_loss"].append(
-                val_loss
-            )
+        history["val_macro_f1"].append(
+            val_macro_f1
+        )
 
-            history["val_accuracy"].append(
-                val_accuracy
-            )
+        history["learning_rate"].append(
+            current_lr
+        )
 
-            history["val_macro_f1"].append(
-                val_macro_f1
-            )
+        # ----------------------------------------------------
+        # Epoch output
+        # ----------------------------------------------------
 
-            history["learning_rate"].append(
-                current_lr
-            )
+        print(
+            f"\nEpoch "
+            f"{epoch:03d}/{MAX_EPOCHS}"
+        )
 
-            elapsed = (
-                time.time()
-                - epoch_start
-            )
+        print(
+            f"  Train | "
+            f"Loss: {train_loss:.4f} | "
+            f"Acc: {train_accuracy:.4f} | "
+            f"Macro F1: {train_macro_f1:.4f}"
+        )
 
-            # ------------------------------------------------
-            # METRICS
-            # ------------------------------------------------
+        print(
+            f"  Val   | "
+            f"Loss: {val_loss:.4f} | "
+            f"Acc: {val_accuracy:.4f} | "
+            f"Macro F1: {val_macro_f1:.4f}"
+        )
 
-            print(
-                f"Train Loss: "
-                f"{train_loss:.4f}"
-            )
+        print(
+            f"  LR: {current_lr:.6f}"
+        )
 
-            print(
-                f"Train Accuracy: "
-                f"{train_accuracy * 100:.2f}%"
-            )
+        # ----------------------------------------------------
+        # Save latest checkpoint
+        # ----------------------------------------------------
 
-            print(
-                f"Val Loss: "
-                f"{val_loss:.4f}"
-            )
+        save_checkpoint(
+            path=LAST_CHECKPOINT_PATH,
+            model=model,
+            optimizer=optimizer,
+            scheduler=scheduler,
+            epoch=epoch,
+            best_val_macro_f1=best_val_macro_f1,
+            history=history,
+        )
 
-            print(
-                f"Val Accuracy: "
-                f"{val_accuracy * 100:.2f}%"
-            )
+        # ----------------------------------------------------
+        # Best model
+        # ----------------------------------------------------
 
-            print(
-                f"Val Macro F1: "
-                f"{val_macro_f1 * 100:.2f}%"
-            )
+        if val_macro_f1 > best_val_macro_f1:
 
-            print(
-                f"Learning Rate: "
-                f"{current_lr:.7f}"
-            )
+            best_val_macro_f1 = val_macro_f1
 
-            print(
-                f"Time: "
-                f"{elapsed / 60:.2f} min"
-            )
-
-            # ------------------------------------------------
-            # BEST MODEL / EARLY STOPPING
-            # ------------------------------------------------
-
-            if val_macro_f1 > best_val_macro_f1:
-
-                best_val_macro_f1 = (
-                    val_macro_f1
-                )
-
-                epochs_without_improvement = 0
-
-                save_checkpoint(
-                    BEST_CHECKPOINT,
-                    epoch,
-                    model,
-                    optimizer,
-                    scheduler,
-                    best_val_macro_f1,
-                    epochs_without_improvement,
-                    train_dataset.classes,
-                    history,
-                )
-
-                print()
-                print(
-                    "★ New best model saved!"
-                )
-
-                print(
-                    f"Best Val Macro F1: "
-                    f"{best_val_macro_f1 * 100:.2f}%"
-                )
-
-            else:
-
-                epochs_without_improvement += 1
-
-                print()
-                print(
-                    "No validation macro F1 improvement."
-                )
-
-                print(
-                    f"Early stopping counter: "
-                    f"{epochs_without_improvement}/"
-                    f"{EARLY_STOPPING_PATIENCE}"
-                )
-
-            # ------------------------------------------------
-            # LAST CHECKPOINT
-            # ------------------------------------------------
+            epochs_without_improvement = 0
 
             save_checkpoint(
-                LAST_CHECKPOINT,
-                epoch,
-                model,
-                optimizer,
-                scheduler,
-                best_val_macro_f1,
-                epochs_without_improvement,
-                train_dataset.classes,
-                history,
+                path=BEST_CHECKPOINT_PATH,
+                model=model,
+                optimizer=optimizer,
+                scheduler=scheduler,
+                epoch=epoch,
+                best_val_macro_f1=best_val_macro_f1,
+                history=history,
             )
 
             print(
-                "Last checkpoint saved."
+                "  ✓ New best model saved."
             )
 
-            # ------------------------------------------------
-            # EARLY STOPPING
-            # ------------------------------------------------
+        else:
 
-            if (
-                epochs_without_improvement
-                >= EARLY_STOPPING_PATIENCE
-            ):
+            epochs_without_improvement += 1
 
-                print()
-                print("=" * 70)
-                print("EARLY STOPPING TRIGGERED")
-                print("=" * 70)
+            print(
+                f"  No improvement "
+                f"({epochs_without_improvement}/"
+                f"{EARLY_STOPPING_PATIENCE})"
+            )
 
-                print(
-                    "Validation macro F1 did not "
-                    "improve for "
-                    f"{EARLY_STOPPING_PATIENCE} "
-                    "consecutive epochs."
-                )
+        # ----------------------------------------------------
+        # Early stopping
+        # ----------------------------------------------------
 
-                print(
-                    f"Best validation macro F1: "
-                    f"{best_val_macro_f1 * 100:.2f}%"
-                )
+        if (
+            epochs_without_improvement
+            >= EARLY_STOPPING_PATIENCE
+        ):
 
-                break
+            print(
+                "\nEarly stopping triggered."
+            )
 
-            print()
+            print(
+                f"No validation Macro F1 "
+                f"improvement for "
+                f"{EARLY_STOPPING_PATIENCE} epochs."
+            )
 
-    except KeyboardInterrupt:
-
-        print()
-        print("=" * 70)
-        print("TRAINING INTERRUPTED")
-        print("=" * 70)
-
-        print(
-            "The last completed epoch was saved to:"
-        )
-
-        print(
-            LAST_CHECKPOINT
-        )
-
-        return
+            break
 
     # --------------------------------------------------------
-    # COMPLETE
+    # Save history
     # --------------------------------------------------------
 
-    print()
+    with open(
+        HISTORY_PATH,
+        "w",
+        encoding="utf-8",
+    ) as file:
+
+        json.dump(
+            history,
+            file,
+            indent=4,
+        )
+
+    # --------------------------------------------------------
+    # Final summary
+    # --------------------------------------------------------
+
+    print("\n")
     print("=" * 70)
     print("TRAINING COMPLETE")
     print("=" * 70)
 
     print(
-        f"Best validation macro F1: "
-        f"{best_val_macro_f1 * 100:.2f}%"
+        f"Best validation Macro F1: "
+        f"{best_val_macro_f1:.4f}"
     )
 
     print(
-        "Best model:",
-        BEST_CHECKPOINT,
+        f"Best checkpoint:\n"
+        f"{BEST_CHECKPOINT_PATH}"
     )
 
     print(
-        "Last model:",
-        LAST_CHECKPOINT,
+        f"Last checkpoint:\n"
+        f"{LAST_CHECKPOINT_PATH}"
     )
 
+    print(
+        f"Training history:\n"
+        f"{HISTORY_PATH}"
+    )
+
+    print(
+        "\nIMPORTANT:"
+    )
+
+    print(
+        "The test set was not used during training."
+    )
+
+    print(
+        "Use evaluate.py for final test-set evaluation."
+    )
+
+
+# ============================================================
+# ENTRY POINT
+# ============================================================
 
 if __name__ == "__main__":
-
     main()
