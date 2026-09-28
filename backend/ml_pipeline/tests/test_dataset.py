@@ -6,6 +6,8 @@ This test verifies the complete data pipeline:
 
     Manifest
         ↓
+    Manifest validation
+        ↓
     Dataset
         ↓
     Preprocessing
@@ -15,13 +17,20 @@ This test verifies the complete data pipeline:
     Batch
 
 The test must pass before model training begins.
+
+Important:
+    Exact and near-duplicate image analysis is intentionally
+    NOT performed here. That belongs to the dataset leakage
+    audit stage.
 """
 
+import pandas as pd
 import torch
 
 from config import (
     MANIFEST_ROOT,
-    PLANTVILLAGE_ROOT,
+    TOMATO_CLASSES,
+    require_plantvillage_paths,
 )
 
 from dataset.dataset import (
@@ -29,6 +38,7 @@ from dataset.dataset import (
     create_dataloaders,
     get_class_counts,
     get_class_weights,
+    validate_manifest,
 )
 
 
@@ -40,8 +50,8 @@ MANIFEST_PATH = (
     MANIFEST_ROOT / "plantvillage_tomato_split.csv"
 )
 
-PLANTVILLAGE_COLOR_DIR = (
-    PLANTVILLAGE_ROOT / "raw" / "color"
+PLANTVILLAGE_ROOT, PLANTVILLAGE_COLOR_DIR = (
+    require_plantvillage_paths()
 )
 
 
@@ -51,6 +61,13 @@ PLANTVILLAGE_COLOR_DIR = (
 
 BATCH_SIZE = 32
 NUM_WORKERS = 0
+
+EXPECTED_TRAIN_SIZE = 12712
+EXPECTED_VAL_SIZE = 2725
+EXPECTED_TEST_SIZE = 2723
+EXPECTED_TOTAL_SIZE = 18160
+
+NUM_CLASSES = len(TOMATO_CLASSES)
 
 
 # ============================================================
@@ -70,14 +87,162 @@ def main():
     print("\nManifest:")
     print(MANIFEST_PATH)
 
+    print("\nPlantVillage root:")
+    print(PLANTVILLAGE_ROOT)
+
     print("\nPlantVillage color directory:")
     print(PLANTVILLAGE_COLOR_DIR)
+
+    assert MANIFEST_PATH.exists(), (
+        f"Manifest does not exist:\n{MANIFEST_PATH}"
+    )
+
+    assert PLANTVILLAGE_COLOR_DIR.exists(), (
+        "PlantVillage color directory does not exist:\n"
+        f"{PLANTVILLAGE_COLOR_DIR}"
+    )
+
+    print("✓ Required paths exist.")
+
+    # --------------------------------------------------------
+    # Load manifest
+    # --------------------------------------------------------
+
+    print("\n" + "-" * 60)
+    print("MANIFEST VALIDATION")
+    print("-" * 60)
+
+    manifest = pd.read_csv(MANIFEST_PATH)
+
+    print(f"Manifest rows: {len(manifest)}")
+
+    # validate_manifest() checks:
+    #   - required columns
+    #   - image IDs
+    #   - image paths
+    #   - class names
+    #   - class indices
+    #   - source dataset
+    #   - source split
+    #   - SHA-256 format
+    #   - project splits
+
+    validate_manifest(manifest)
+
+    print("✓ Manifest structure and metadata valid.")
+
+    # --------------------------------------------------------
+    # Verify manifest total
+    # --------------------------------------------------------
+
+    assert len(manifest) == EXPECTED_TOTAL_SIZE, (
+        f"Unexpected manifest size: {len(manifest)}"
+    )
+
+    print(
+        f"✓ Manifest contains {len(manifest)} records."
+    )
+
+    # --------------------------------------------------------
+    # Verify source dataset
+    # --------------------------------------------------------
+
+    source_datasets = set(
+        manifest["source_dataset"].unique()
+    )
+
+    assert source_datasets == {"PlantVillage"}, (
+        "Unexpected source dataset values: "
+        f"{source_datasets}"
+    )
+
+    print("✓ Source dataset: PlantVillage.")
+
+    # --------------------------------------------------------
+    # Verify source split metadata
+    # --------------------------------------------------------
+
+    source_splits = set(
+        manifest["source_split"].astype(str).unique()
+    )
+
+    assert source_splits == {"unknown"}, (
+        "Unexpected source split values: "
+        f"{source_splits}"
+    )
+
+    print(
+        "✓ Source split metadata correctly recorded as "
+        "'unknown'."
+    )
+
+    # --------------------------------------------------------
+    # Verify SHA-256 metadata
+    # --------------------------------------------------------
+
+    assert manifest["sha256"].notna().all(), (
+        "Manifest contains missing SHA-256 hashes."
+    )
+
+    assert (
+        manifest["sha256"]
+        .astype(str)
+        .str.fullmatch(r"[0-9a-fA-F]{64}")
+        .all()
+    ), (
+        "Manifest contains invalid SHA-256 hashes."
+    )
+
+    print("✓ SHA-256 metadata valid.")
+
+    # --------------------------------------------------------
+    # Verify classes
+    # --------------------------------------------------------
+
+    found_classes = set(
+        manifest["class_name"].unique()
+    )
+
+    assert found_classes == set(TOMATO_CLASSES), (
+        "Manifest classes do not match frozen "
+        "10-class definition."
+    )
+
+    print(
+        f"✓ Frozen {NUM_CLASSES}-class definition verified."
+    )
+
+    # --------------------------------------------------------
+    # Verify project split distribution
+    # --------------------------------------------------------
+
+    split_counts = (
+        manifest["project_split"]
+        .value_counts()
+        .to_dict()
+    )
+
+    print("\nProject split distribution:")
+
+    for split in ("train", "val", "test"):
+        print(
+            f"{split:5s}: "
+            f"{split_counts.get(split, 0)}"
+        )
+
+    assert split_counts.get("train") == EXPECTED_TRAIN_SIZE
+    assert split_counts.get("val") == EXPECTED_VAL_SIZE
+    assert split_counts.get("test") == EXPECTED_TEST_SIZE
+
+    print("✓ Project split distribution valid.")
 
     # --------------------------------------------------------
     # Create datasets
     # --------------------------------------------------------
 
-    print("\nCreating datasets...")
+    print("\n" + "-" * 60)
+    print("CREATING DATASETS")
+    print("-" * 60)
 
     train_dataset, val_dataset, test_dataset = create_datasets(
         manifest_path=MANIFEST_PATH,
@@ -98,15 +263,15 @@ def main():
     print(f"Val:   {len(val_dataset)}")
     print(f"Test:  {len(test_dataset)}")
 
-    assert len(train_dataset) == 12712, (
+    assert len(train_dataset) == EXPECTED_TRAIN_SIZE, (
         f"Unexpected train size: {len(train_dataset)}"
     )
 
-    assert len(val_dataset) == 2725, (
+    assert len(val_dataset) == EXPECTED_VAL_SIZE, (
         f"Unexpected validation size: {len(val_dataset)}"
     )
 
-    assert len(test_dataset) == 2723, (
+    assert len(test_dataset) == EXPECTED_TEST_SIZE, (
         f"Unexpected test size: {len(test_dataset)}"
     )
 
@@ -122,7 +287,7 @@ def main():
         + len(test_dataset)
     )
 
-    assert total == 18160, (
+    assert total == EXPECTED_TOTAL_SIZE, (
         f"Unexpected total dataset size: {total}"
     )
 
@@ -138,14 +303,14 @@ def main():
 
     class_counts = get_class_counts(train_dataset)
 
+    assert len(class_counts) == NUM_CLASSES
+
     for class_index, count in class_counts.items():
         print(
             f"{class_index:2d} : {count}"
         )
 
-    assert len(class_counts) == 10
-
-    assert sum(class_counts.values()) == 12712, (
+    assert sum(class_counts.values()) == EXPECTED_TRAIN_SIZE, (
         "Training class counts do not sum to "
         "the training dataset size."
     )
@@ -163,7 +328,10 @@ def main():
             "training samples."
         )
 
-    print("✓ All 10 classes have training samples.")
+    print(
+        f"✓ All {NUM_CLASSES} classes have "
+        "training samples."
+    )
 
     # --------------------------------------------------------
     # Class weights
@@ -190,7 +358,9 @@ def main():
     # Validate class weights
     # --------------------------------------------------------
 
-    assert class_weights.shape == (10,), (
+    assert class_weights.shape == (
+        NUM_CLASSES,
+    ), (
         f"Unexpected class-weight shape: "
         f"{class_weights.shape}"
     )
@@ -302,7 +472,7 @@ def main():
     )
 
     assert labels.min().item() >= 0
-    assert labels.max().item() <= 9
+    assert labels.max().item() < NUM_CLASSES
 
     print("✓ Training batch valid.")
 
@@ -344,7 +514,7 @@ def main():
     assert torch.isfinite(images).all()
 
     assert labels.min().item() >= 0
-    assert labels.max().item() <= 9
+    assert labels.max().item() < NUM_CLASSES
 
     print("✓ Validation batch valid.")
 
@@ -386,7 +556,7 @@ def main():
     assert torch.isfinite(images).all()
 
     assert labels.min().item() >= 0
-    assert labels.max().item() <= 9
+    assert labels.max().item() < NUM_CLASSES
 
     print("✓ Test batch valid.")
 
@@ -400,8 +570,11 @@ def main():
 
     print("\nPipeline verified:")
     print("  ✓ PlantVillage manifest")
+    print("  ✓ Manifest schema")
+    print("  ✓ Manifest provenance")
+    print("  ✓ SHA-256 metadata")
     print("  ✓ 70/15/15 project split")
-    print("  ✓ 10 tomato classes")
+    print(f"  ✓ {NUM_CLASSES} tomato classes")
     print("  ✓ Training class distribution")
     print("  ✓ Moderated class weights")
     print("  ✓ Image loading")

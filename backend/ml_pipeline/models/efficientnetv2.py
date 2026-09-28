@@ -1,89 +1,46 @@
 """
 PhytoSense AI
-EfficientNetV2-B0 Model Definition.
+EfficientNetV2-B0 model definition.
 
 This module is responsible only for constructing the
 classification model used by the ML training pipeline.
-
-Architecture:
-
-    Image
-      ↓
-    EfficientNetV2-B0
-      ↓
-    Classification Head
-      ↓
-    10 Tomato Classes
 """
 
 import torch
-import torch.nn as nn
 import timm
 
+from backend.ml_pipeline.config import (
+    MODEL_NAME,
+    NUM_CLASSES,
+    PRETRAINED,
+)
 
-# ============================================================
-# MODEL CONFIGURATION
-# ============================================================
-
-MODEL_NAME = "tf_efficientnetv2_b0"
-
-DEFAULT_NUM_CLASSES = 10
-
-DEFAULT_PRETRAINED = True
-
-
-# ============================================================
-# MODEL CREATION
-# ============================================================
 
 def create_model(
-    num_classes=DEFAULT_NUM_CLASSES,
-    pretrained=DEFAULT_PRETRAINED,
+    num_classes=NUM_CLASSES,
+    pretrained=PRETRAINED,
 ):
     """
-    Create the EfficientNetV2-B0 classification model.
+    Create the configured EfficientNetV2-B0 classifier.
 
-    Parameters
-    ----------
-    num_classes : int
-        Number of output classes.
-
-    pretrained : bool
-        Whether to initialize the backbone with ImageNet
-        pretrained weights.
-
-    Returns
-    -------
-    torch.nn.Module
-        Configured EfficientNetV2-B0 model.
+    The architecture and class-count defaults come from the
+    centralized experiment configuration so the model definition
+    cannot silently drift from the training/evaluation pipeline.
     """
-
-    model = timm.create_model(
+    return timm.create_model(
         MODEL_NAME,
         pretrained=pretrained,
         num_classes=num_classes,
     )
 
-    return model
-
-
-# ============================================================
-# MODEL INFORMATION
-# ============================================================
 
 def get_model_name():
-    """
-    Return the model architecture name.
-    """
-
+    """Return the configured model architecture name."""
     return MODEL_NAME
 
 
 def get_num_parameters(model):
-    """
-    Return the total number of trainable parameters.
-    """
-
+    """Return the number of trainable parameters."""
     return sum(
         parameter.numel()
         for parameter in model.parameters()
@@ -91,33 +48,17 @@ def get_num_parameters(model):
     )
 
 
-# ============================================================
-# MODEL SMOKE TEST
-# ============================================================
-
 def test_model(
-    num_classes=DEFAULT_NUM_CLASSES,
+    num_classes=NUM_CLASSES,
     input_size=224,
 ):
     """
-    Perform a basic forward-pass test.
-
-    This verifies that:
-
-        Input
-          ↓
-        Model
-          ↓
-        Expected output
-
-    works correctly before training begins.
+    Perform a basic forward-pass smoke test.
     """
-
     model = create_model(
         num_classes=num_classes,
         pretrained=False,
     )
-
     model.eval()
 
     dummy_input = torch.randn(
@@ -128,17 +69,12 @@ def test_model(
     )
 
     with torch.no_grad():
-
         output = model(dummy_input)
 
-    expected_shape = (
-        2,
-        num_classes,
-    )
+    expected_shape = (2, num_classes)
 
     assert output.shape == expected_shape, (
-        f"Unexpected output shape: "
-        f"{output.shape}; "
+        f"Unexpected output shape: {output.shape}; "
         f"expected {expected_shape}"
     )
 
@@ -149,33 +85,18 @@ def test_model(
     return model, output
 
 
-# ============================================================
-# MAIN
-# ============================================================
-
 if __name__ == "__main__":
-
     print("=" * 60)
     print("PHYTOSENSE AI — MODEL SMOKE TEST")
     print("=" * 60)
 
     model, output = test_model()
 
-    print(
-        f"\nModel: {get_model_name()}"
-    )
-
-    print(
-        f"Output shape: {output.shape}"
-    )
-
+    print(f"\nModel: {get_model_name()}")
+    print(f"Output shape: {output.shape}")
     print(
         f"Trainable parameters: "
         f"{get_num_parameters(model):,}"
     )
-
-    print(
-        "\n✓ Model forward-pass test passed."
-    )
-
+    print("\n✓ Model forward-pass test passed.")
     print("=" * 60)

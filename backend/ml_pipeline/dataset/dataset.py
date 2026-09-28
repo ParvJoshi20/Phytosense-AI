@@ -8,13 +8,18 @@ train / validation / test split.
 The original PlantVillage dataset is never modified.
 """
 
-from pathlib import Path
 from collections import Counter
+from pathlib import Path
 
 import pandas as pd
 import torch
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader
+
+from config import (
+    CLASS_NAMES,
+    CLASS_TO_INDEX,
+)
 
 from dataset.transforms import (
     get_train_transform,
@@ -24,26 +29,24 @@ from dataset.transforms import (
 
 
 # ============================================================
-# EXPECTED CLASSES
+# MANIFEST SCHEMA
 # ============================================================
 
-EXPECTED_CLASSES = [
-    "Tomato___Bacterial_spot",
-    "Tomato___Early_blight",
-    "Tomato___Late_blight",
-    "Tomato___Leaf_Mold",
-    "Tomato___Septoria_leaf_spot",
-    "Tomato___Spider_mites Two-spotted_spider_mite",
-    "Tomato___Target_Spot",
-    "Tomato___Tomato_Yellow_Leaf_Curl_Virus",
-    "Tomato___Tomato_mosaic_virus",
-    "Tomato___healthy",
-]
+REQUIRED_MANIFEST_COLUMNS = {
+    "image_id",
+    "image_path",
+    "class_name",
+    "class_index",
+    "source_dataset",
+    "source_split",
+    "sha256",
+    "project_split",
+}
 
-
-CLASS_TO_INDEX = {
-    class_name: index
-    for index, class_name in enumerate(EXPECTED_CLASSES)
+EXPECTED_PROJECT_SPLITS = {
+    "train",
+    "val",
+    "test",
 }
 
 
@@ -54,6 +57,13 @@ CLASS_TO_INDEX = {
 class PlantVillageTomatoDataset(Dataset):
     """
     PyTorch Dataset backed by the PlantVillage project manifest.
+
+    The manifest determines:
+        - which image is used
+        - its class
+        - its project split
+
+    This class does not perform dataset splitting.
     """
 
     def __init__(
@@ -76,7 +86,6 @@ class PlantVillageTomatoDataset(Dataset):
         return len(self.dataframe)
 
     def __getitem__(self, index):
-
         row = self.dataframe.iloc[index]
 
         image_path = self.image_root / row["image_path"]
@@ -104,39 +113,78 @@ class PlantVillageTomatoDataset(Dataset):
 def validate_manifest(manifest):
     """
     Validate the structure and class mapping of the manifest.
+
+    The manifest is treated as the source of truth for the
+    project split.
+
+    Duplicate content hashes are intentionally NOT rejected here.
+    Duplicate-content auditing belongs to the dataset leakage
+    audit stage.
     """
 
-    required_columns = {
-        "image_path",
-        "class_name",
-        "class_index",
-        "original_split",
-        "project_split",
-    }
+    # --------------------------------------------------------
+    # Validate required columns
+    # --------------------------------------------------------
 
-    missing_columns = required_columns - set(manifest.columns)
+    missing_columns = (
+        REQUIRED_MANIFEST_COLUMNS
+        - set(manifest.columns)
+    )
 
     if missing_columns:
         raise RuntimeError(
-            f"Manifest is missing required columns:\n"
+            "Manifest is missing required columns:\n"
             f"{sorted(missing_columns)}"
         )
 
     if manifest.empty:
-        raise RuntimeError("Manifest contains no records.")
+        raise RuntimeError(
+            "Manifest contains no records."
+        )
+
+    # --------------------------------------------------------
+    # Validate image IDs
+    # --------------------------------------------------------
+
+    if manifest["image_id"].isna().any():
+        raise RuntimeError(
+            "Manifest contains missing image IDs."
+        )
+
+    if manifest["image_id"].duplicated().any():
+        raise RuntimeError(
+            "Manifest contains duplicate image IDs."
+        )
+
+    # --------------------------------------------------------
+    # Validate image paths
+    # --------------------------------------------------------
+
+    if manifest["image_path"].isna().any():
+        raise RuntimeError(
+            "Manifest contains missing image paths."
+        )
+
+    if manifest["image_path"].duplicated().any():
+        raise RuntimeError(
+            "Manifest contains duplicate image paths."
+        )
 
     # --------------------------------------------------------
     # Validate classes
     # --------------------------------------------------------
 
-    found_classes = set(manifest["class_name"].unique())
-    expected_classes = set(EXPECTED_CLASSES)
+    found_classes = set(
+        manifest["class_name"].unique()
+    )
+
+    expected_classes = set(CLASS_NAMES)
 
     if found_classes != expected_classes:
         raise RuntimeError(
             "Manifest classes do not match the expected "
             "PlantVillage tomato classes.\n\n"
-            f"Expected:\n{EXPECTED_CLASSES}\n\n"
+            f"Expected:\n{CLASS_NAMES}\n\n"
             f"Found:\n{sorted(found_classes)}"
         )
 
@@ -149,48 +197,88 @@ def validate_manifest(manifest):
         class_name = row["class_name"]
         class_index = int(row["class_index"])
 
+        if class_name not in CLASS_TO_INDEX:
+            raise RuntimeError(
+                f"Unknown class in manifest: {class_name}"
+            )
+
         expected_index = CLASS_TO_INDEX[class_name]
 
         if class_index != expected_index:
             raise RuntimeError(
-                f"Invalid class mapping:\n"
+                "Invalid class mapping:\n"
                 f"{class_name} → {class_index}\n"
                 f"Expected → {expected_index}"
             )
 
     # --------------------------------------------------------
-    # Validate project splits
+    # Validate source dataset
     # --------------------------------------------------------
 
-    expected_splits = {
-        "train",
-        "val",
-        "test",
-    }
+    source_datasets = set(
+        manifest["source_dataset"].unique()
+    )
+
+    if source_datasets != {"PlantVillage"}:
+        raise RuntimeError(
+            "Manifest contains unexpected source dataset values.\n"
+            f"Expected: {{'PlantVillage'}}\n"
+            f"Found: {source_datasets}"
+        )
+
+    # --------------------------------------------------------
+    # Validate source split
+    # --------------------------------------------------------
+
+    if manifest["source_split"].isna().any():
+        raise RuntimeError(
+            "Manifest contains missing source split values."
+        )
+
+    # We deliberately allow "unknown".
+    #
+    # The preparation stage must not fabricate an original
+    # PlantVillage train/test assignment when it cannot be
+    # established from the authoritative source.
+    if (manifest["source_split"].astype(str).str.strip() == "").any():
+        raise RuntimeError(
+            "Manifest contains empty source split values."
+        )
+
+    # --------------------------------------------------------
+    # Validate SHA-256 hashes
+    # --------------------------------------------------------
+
+    if manifest["sha256"].isna().any():
+        raise RuntimeError(
+            "Manifest contains missing SHA-256 hashes."
+        )
+
+    invalid_hashes = manifest[
+        ~manifest["sha256"].astype(str).str.fullmatch(
+            r"[0-9a-fA-F]{64}"
+        )
+    ]
+
+    if not invalid_hashes.empty:
+        raise RuntimeError(
+            "Manifest contains invalid SHA-256 hashes:\n"
+            f"{len(invalid_hashes)} invalid records."
+        )
+
+    # --------------------------------------------------------
+    # Validate project splits
+    # --------------------------------------------------------
 
     found_splits = set(
         manifest["project_split"].unique()
     )
 
-    if found_splits != expected_splits:
+    if found_splits != EXPECTED_PROJECT_SPLITS:
         raise RuntimeError(
             "Manifest project splits are invalid.\n"
-            f"Expected: {expected_splits}\n"
+            f"Expected: {EXPECTED_PROJECT_SPLITS}\n"
             f"Found: {found_splits}"
-        )
-
-    # --------------------------------------------------------
-    # Validate duplicate image paths
-    # --------------------------------------------------------
-
-    duplicate_paths = manifest[
-        manifest["image_path"].duplicated()
-    ]
-
-    if not duplicate_paths.empty:
-        raise RuntimeError(
-            f"Manifest contains "
-            f"{len(duplicate_paths)} duplicate image paths."
         )
 
 
@@ -239,17 +327,11 @@ def create_datasets(
     # Transforms
     # --------------------------------------------------------
 
-    train_transform = get_train_transform(
-        
-    )
+    train_transform = get_train_transform()
 
-    val_transform = get_val_transform(
-        
-    )
+    val_transform = get_val_transform()
 
-    test_transform = get_test_transform(
-        
-    )
+    test_transform = get_test_transform()
 
     # --------------------------------------------------------
     # Dataset objects
@@ -348,10 +430,10 @@ def create_dataloaders(
 
 def get_class_counts(dataset):
     """
-    Return training class counts.
+    Return class counts for a dataset.
 
     This function should be used with the TRAINING dataset
-    when calculating imbalance statistics.
+    when calculating training imbalance statistics.
     """
 
     counts = Counter(
@@ -361,7 +443,7 @@ def get_class_counts(dataset):
 
     return {
         class_index: counts.get(class_index, 0)
-        for class_index in range(len(EXPECTED_CLASSES))
+        for class_index in range(len(CLASS_NAMES))
     }
 
 
@@ -385,9 +467,7 @@ def get_class_weights(dataset):
 
     weights = []
 
-    for class_index in range(
-        len(EXPECTED_CLASSES)
-    ):
+    for class_index in range(len(CLASS_NAMES)):
 
         count = counts[class_index]
 

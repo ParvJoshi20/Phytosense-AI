@@ -1,0 +1,40 @@
+{
+  "dataset_version": "plantvillage_tomato_v1",
+  "manifest": "D:\\Code\\_Archieve\\Minor Project\\Phytosense-AI\\backend\\ml_pipeline\\manifests\\plantvillage_tomato_split.csv",
+  "total_records": 18160,
+  "num_classes": 10,
+  "class_names": [
+    "Tomato___Bacterial_spot",
+    "Tomato___Early_blight",
+    "Tomato___Late_blight",
+    "Tomato___Leaf_Mold",
+    "Tomato___Septoria_leaf_spot",
+    "Tomato___Spider_mites Two-spotted_spider_mite",
+    "Tomato___Target_Spot",
+    "Tomato___Tomato_Yellow_Leaf_Curl_Virus",
+    "Tomato___Tomato_mosaic_virus",
+    "Tomato___healthy"
+  ],
+  "project_split_counts": {
+    "test": 2721,
+    "train": 12712,
+    "val": 2727
+  },
+  "sha256": {
+    "duplicate_groups": 14,
+    "cross_split_duplicate_groups": 0
+  },
+  "phash": {
+    "hash_bits": 64,
+    "max_hamming_distance": 8,
+    "chunk_size": 256,
+    "candidate_pairs": 2133,
+    "cross_split_candidate_pairs": 947
+  },
+  "reports": {
+    "exact_duplicates": "D:\\Code\\_Archieve\\Minor Project\\Phytosense-AI\\backend\\ml_pipeline\\audit\\plantvillage_tomato_v1\\exact_duplicate_groups.csv",
+    "cross_split_exact_duplicates": "D:\\Code\\_Archieve\\Minor Project\\Phytosense-AI\\backend\\ml_pipeline\\audit\\plantvillage_tomato_v1\\cross_split_exact_duplicates.csv",
+    "near_duplicates": "D:\\Code\\_Archieve\\Minor Project\\Phytosense-AI\\backend\\ml_pipeline\\audit\\plantvillage_tomato_v1\\near_duplicate_candidates.csv",
+    "cross_split_near_duplicates": "D:\\Code\\_Archieve\\Minor Project\\Phytosense-AI\\backend\\ml_pipeline\\audit\\plantvillage_tomato_v1\\cross_split_near_duplicates.csv"
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "manifest_path": "D:\\Code\\_Archieve\\Minor Project\\Phytosense-AI\\backend\\ml_pipeline\\manifests\\plantvillage_tomato_split.csv",
+  "dataset_root": "D:\\Code\\_Archieve\\Minor Project\\Datasets\\PlantVillage-Dataset\\raw\\color",
+  "expected_total": 18160,
+  "actual_total": 18160,
+  "unique_sha256": 18146,
+  "exact_duplicate_groups": 14,
+  "cross_split_exact_duplicate_groups": 0,
+  "near_duplicate_candidates": 2133,
+  "cross_split_near_duplicate_candidates": 947,
+  "phash_max_distance": 8,
+  "phash_chunk_size": 256,
+  "project_split_counts": {
+    "test": 2721,
+    "train": 12712,
+    "val": 2727
+  },
+  "class_distribution": {
+    "train": {
+      "Tomato___Bacterial_spot": 1489,
+      "Tomato___Early_blight": 700,
+      "Tomato___Late_blight": 1336,
+      "Tomato___Leaf_Mold": 666,
+      "Tomato___Septoria_leaf_spot": 1240,
+      "Tomato___Spider_mites Two-spotted_spider_mite": 1173,
+      "Tomato___Target_Spot": 983,
+      "Tomato___Tomato_Yellow_Leaf_Curl_Virus": 3750,
+      "Tomato___Tomato_mosaic_virus": 261,
+      "Tomato___healthy": 1114
+    },
+    "val": {
+      "Tomato___Bacterial_spot": 319,
+      "Tomato___Early_blight": 150,
+      "Tomato___Late_blight": 287,
+      "Tomato___Leaf_Mold": 143,
+      "Tomato___Septoria_leaf_spot": 266,
+      "Tomato___Spider_mites Two-spotted_spider_mite": 252,
+      "Tomato___Target_Spot": 211,
+      "Tomato___Tomato_Yellow_Leaf_Curl_Virus": 804,
+      "Tomato___Tomato_mosaic_virus": 56,
+      "Tomato___healthy": 239
+    },
+    "test": {
+      "Tomato___Bacterial_spot": 319,
+      "Tomato___Early_blight": 150,
+      "Tomato___Late_blight": 286,
+      "Tomato___Leaf_Mold": 143,
+      "Tomato___Septoria_leaf_spot": 265,
+      "Tomato___Spider_mites Two-spotted_spider_mite": 251,
+      "Tomato___Target_Spot": 210,
+      "Tomato___Tomato_Yellow_Leaf_Curl_Virus": 803,
+      "Tomato___Tomato_mosaic_virus": 56,
+      "Tomato___healthy": 238
+    }
+  },
+  "near_duplicate_review_manifest": "D:\\Code\\_Archieve\\Minor Project\\Phytosense-AI\\backend\\ml_pipeline\\audit_reports\\near_duplicate_review\\review_manifest.csv",
+  "near_duplicate_review_root": "D:\\Code\\_Archieve\\Minor Project\\Phytosense-AI\\backend\\ml_pipeline\\audit_reports\\near_duplicate_review",
+  "audit_status": {
+    "structure": true,
+    "classes": true,
+    "provenance": true,
+    "images": true,
+    "record_uniqueness": true,
+    "sha256": true,
+    "splits": true,
+    "path_leakage": true,
+    "cross_split_exact_duplicates": true,
+    "cross_split_near_duplicate_review_required": true
+  }
+}

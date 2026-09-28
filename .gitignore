@@ -1,71 +1,149 @@
-# =========================================
-# ROOT .gitignore - Phytosense AI
-# =========================================
+# ============================================================
+# PhytoSense AI - Git Ignore
+# ============================================================
 
-# =========================================
-# FRONTEND (Next.js Workspace)
-# =========================================
 
-# Dependencies
+# ------------------------------------------------------------
+# Operating System / Editor
+# ------------------------------------------------------------
+
+.DS_Store
+Thumbs.db
+.history/
+.vscode/
+.idea/
+
+
+# ------------------------------------------------------------
+# Frontend - Next.js
+# ------------------------------------------------------------
+
 frontend/node_modules/
-
-# Next.js build output
 frontend/.next/
 frontend/out/
-
-# Environment variables
-frontend/.env
-frontend/.env.local
-frontend/.env.development.local
-frontend/.env.test.local
-frontend/.env.production.local
-
-# Next.js build cache and logs
 frontend/.swc/
+frontend/.vercel/
+
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
 frontend/npm-debug.log*
 frontend/yarn-debug.log*
 frontend/yarn-error.log*
 frontend/.pnpm-debug.log*
 
-# Vercel deployment cache
-frontend/.vercel/
 
-# Extras
-.history/
+# ------------------------------------------------------------
+# Backend - Python / FastAPI
+# ------------------------------------------------------------
 
-# =========================================
-# BACKEND (FastAPI & PyTorch ML Workspace)
-# =========================================
-
-# 1. Python bytecode and cache
 backend/**/__pycache__/
 backend/**/*.py[cod]
 backend/**/$py.class
 
-# 2. Virtual environments
 backend/venv/
 backend/env/
 backend/.venv/
 backend/ENV/
 
-# 3. Secrets and configuration
+
+# ------------------------------------------------------------
+# Python Environments
+# ------------------------------------------------------------
+
+.venv/
+.venv-gpu/
+
+
+# ------------------------------------------------------------
+# Environment Variables / Secrets
+# ------------------------------------------------------------
+
+.env
+.env.*
+!.env.example
+
 backend/.env
-backend/.env.local
-# ML Pipeline local environment
+backend/.env.*
+!backend/.env.example
+
 backend/ml_pipeline/.env
-backend/ml_pipeline/.env.example
+backend/ml_pipeline/.env.*
+!backend/ml_pipeline/.env.example
 
-# 4. PyTorch Model Weights and Checkpoints
-backend/ml_pipeline/weights/*.pth
-backend/ml_pipeline/weights/*.pt
-backend/ml_pipeline/weights/*.onnx
-!backend/ml_pipeline/weights/.keep
-!backend/ml_pipeline/weights/.gitkeep
 
-# 5. Unit testing, coverage reports, and logs
+# ------------------------------------------------------------
+# Python Testing / Coverage
+# ------------------------------------------------------------
+
+backend/.pytest_cache/
 backend/htmlcov/
 backend/.tox/
 backend/.coverage
 backend/.coverage.*
-backend/.pytest_cache/
+.pytest_cache/
+.coverage
+.coverage.*
+
+
+# ------------------------------------------------------------
+# Logs
+# ------------------------------------------------------------
+
+*.log
 backend/*.log
+backend/ml_pipeline/**/*.log
+
+
+# ------------------------------------------------------------
+# ML Model Weights
+# ------------------------------------------------------------
+
+# Legacy / standalone model weights
+backend/ml_pipeline/weights/*.pt
+backend/ml_pipeline/weights/*.pth
+backend/ml_pipeline/weights/*.onnx
+backend/ml_pipeline/weights/*.h5
+backend/ml_pipeline/weights/*.keras
+
+!backend/ml_pipeline/weights/.keep
+!backend/ml_pipeline/weights/.gitkeep
+
+
+# ------------------------------------------------------------
+# ML Experiment Artifacts
+# ------------------------------------------------------------
+
+# Generated experiment outputs
+backend/ml_pipeline/experiments/**/checkpoints/
+backend/ml_pipeline/experiments/**/models/
+backend/ml_pipeline/experiments/**/history/
+backend/ml_pipeline/experiments/**/metrics/
+backend/ml_pipeline/experiments/**/plots/
+backend/ml_pipeline/experiments/**/logs/
+
+
+# Individual model/export formats
+backend/ml_pipeline/experiments/**/*.pt
+backend/ml_pipeline/experiments/**/*.pth
+backend/ml_pipeline/experiments/**/*.onnx
+backend/ml_pipeline/experiments/**/*.h5
+backend/ml_pipeline/experiments/**/*.keras
+
+
+# ------------------------------------------------------------
+# Dataset Audit - Generated Visual Review
+# ------------------------------------------------------------
+
+# Human-review image pages generated from near-duplicate analysis
+backend/ml_pipeline/audit_reports/near_duplicate_review/
+
+
+# ------------------------------------------------------------
+# Temporary / Generated Files
+# ------------------------------------------------------------
+
+*.tmp
+*.temp
+*.bak
