@@ -1,0 +1,67 @@
+{
+    "experiment": {
+        "id": "EXP-001",
+        "name": "EfficientNetV2-B0 Baseline",
+        "dataset_version": "PlantVillage Tomato v1"
+    },
+    "dataset": {
+        "manifest_path": "D:\\Code\\_Archieve\\Minor Project\\Phytosense-AI\\backend\\ml_pipeline\\manifests\\plantvillage_tomato_split.csv",
+        "image_root": "D:\\Code\\_Archieve\\Minor Project\\Datasets\\PlantVillage-Dataset\\raw\\color",
+        "num_classes": 10,
+        "class_names": [
+            "Tomato___Bacterial_spot",
+            "Tomato___Early_blight",
+            "Tomato___Late_blight",
+            "Tomato___Leaf_Mold",
+            "Tomato___Septoria_leaf_spot",
+            "Tomato___Spider_mites Two-spotted_spider_mite",
+            "Tomato___Target_Spot",
+            "Tomato___Tomato_Yellow_Leaf_Curl_Virus",
+            "Tomato___Tomato_mosaic_virus",
+            "Tomato___healthy"
+        ],
+        "split": {
+            "train": 0.7,
+            "validation": 0.15,
+            "test": 0.15
+        }
+    },
+    "model": {
+        "name": "tf_efficientnetv2_b0",
+        "display_name": "EfficientNetV2-B0",
+        "pretrained": true,
+        "input_size": 224
+    },
+    "training": {
+        "batch_size": 32,
+        "max_epochs": 150,
+        "early_stopping_enabled": true,
+        "early_stopping_patience": 10,
+        "learning_rate": 0.0001,
+        "optimizer": "AdamW",
+        "weight_decay": 0.0001,
+        "regularization_lambda": 0.0001,
+        "loss": "WeightedCrossEntropy",
+        "class_weight_method": "sqrt_inverse_frequency",
+        "model_selection_metric": "val_macro_f1",
+        "random_seed": 42
+    },
+    "scheduler": {
+        "name": "ReduceLROnPlateau",
+        "mode": "max",
+        "factor": 0.5,
+        "patience": 3,
+        "min_lr": 0.0
+    },
+    "runtime": {
+        "device": "cuda",
+        "torch_version": "2.14.0+cu130",
+        "numpy_version": "2.5.2",
+        "python_version": "3.12.10",
+        "platform": "Windows-11-10.0.26200-SP0",
+        "cuda_available": true,
+        "cuda_version": "13.0",
+        "gpu_name": "NVIDIA GeForce RTX 3050 Laptop GPU",
+        "started_at_utc": "2026-09-30T07:15:54.729673+00:00"
+    }
+}

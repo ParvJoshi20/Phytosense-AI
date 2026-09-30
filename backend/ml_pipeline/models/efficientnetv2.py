@@ -9,7 +9,7 @@ classification model used by the ML training pipeline.
 import torch
 import timm
 
-from backend.ml_pipeline.config import (
+from config import (
     MODEL_NAME,
     NUM_CLASSES,
     PRETRAINED,
