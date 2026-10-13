@@ -30,6 +30,15 @@ It does NOT perform actual model training.
 It does NOT modify the test set.
 """
 
+import sys
+from pathlib import Path
+
+# Add the ml_pipeline directory to Python's import path.
+ML_PIPELINE_DIR = Path(__file__).resolve().parents[1]
+
+if str(ML_PIPELINE_DIR) not in sys.path:
+    sys.path.insert(0, str(ML_PIPELINE_DIR))
+
 import copy
 
 import torch
@@ -37,7 +46,7 @@ import torch.nn as nn
 import torch.optim as optim
 
 from config import (
-    TOMATO_MANIFEST,
+    MANIFEST_PATH,
     COLOR_ROOT,
     NUM_CLASSES,
     RANDOM_SEED,
@@ -123,7 +132,7 @@ def main():
     print("-" * 70)
 
     print(
-        f"Manifest: {TOMATO_MANIFEST}"
+        f"Manifest: {MANIFEST_PATH}"
     )
 
     print(
@@ -132,7 +141,7 @@ def main():
 
     train_dataset, val_dataset, test_dataset = (
         create_datasets(
-            manifest_path=TOMATO_MANIFEST,
+            manifest_path=MANIFEST_PATH,
             image_root=COLOR_ROOT,
         )
     )
@@ -150,8 +159,15 @@ def main():
     )
 
     assert len(train_dataset) == 12712
-    assert len(val_dataset) == 2725
-    assert len(test_dataset) == 2723
+    assert len(val_dataset) == 2727
+    assert len(test_dataset) == 2721
+
+    assert (
+        len(train_dataset)
+        + len(val_dataset)
+        + len(test_dataset)
+    ) == 18160
+
 
     print(
         "✓ Dataset sizes verified."

@@ -1,0 +1,105 @@
+
+{
+    "experiment": {
+        "id": "EXP-002",
+        "name": "ResNet50 Model Comparison",
+        "dataset_version": "PlantVillage Tomato v1",
+        "status": "configuration_only"
+    },
+    "dataset": {
+        "manifest_path": "../../manifests/plantvillage_tomato_split.csv",
+        "image_root_env": "DATASETS_ROOT",
+        "image_root_subpath": "PlantVillage-Dataset/raw/color",
+        "num_classes": 10,
+        "class_names": [
+            "Tomato___Bacterial_spot",
+            "Tomato___Early_blight",
+            "Tomato___Late_blight",
+            "Tomato___Leaf_Mold",
+            "Tomato___Septoria_leaf_spot",
+            "Tomato___Spider_mites Two-spotted_spider_mite",
+            "Tomato___Target_Spot",
+            "Tomato___Tomato_Yellow_Leaf_Curl_Virus",
+            "Tomato___Tomato_mosaic_virus",
+            "Tomato___healthy"
+        ],
+        "split": {
+            "train": 0.70,
+            "validation": 0.15,
+            "test": 0.15,
+            "source": "existing frozen manifest; do not regenerate"
+        },
+        "expected_counts": {
+            "train": 12712,
+            "validation": 2727,
+            "test": 2721,
+            "total": 18160
+        }
+    },
+    "model": {
+        "name": "resnet50",
+        "display_name": "ResNet50",
+        "pretrained": true,
+        "input_size": 224,
+        "num_classes": 10
+    },
+    "preprocessing": {
+        "resize_size": 256,
+        "image_size": 224,
+        "mean": [0.485, 0.456, 0.406],
+        "std": [0.229, 0.224, 0.225],
+        "validation_test": [
+            "Resize(256)",
+            "CenterCrop(224)",
+            "ToTensor",
+            "ImageNetNormalize"
+        ],
+        "training": [
+            "RandomResizedCrop(224, scale=[0.8, 1.0], ratio=[0.9, 1.1])",
+            "RandomHorizontalFlip(p=0.5)",
+            "RandomRotation(degrees=15)",
+            "ColorJitter(brightness=0.15, contrast=0.15, saturation=0.15, hue=0.02)",
+            "ToTensor",
+            "ImageNetNormalize"
+        ]
+    },
+    "training": {
+        "batch_size": 32,
+        "max_epochs": 150,
+        "early_stopping_enabled": true,
+        "early_stopping_patience": 10,
+        "learning_rate": 0.0001,
+        "optimizer": "AdamW",
+        "weight_decay": 0.0001,
+        "loss": "WeightedCrossEntropy",
+        "class_weight_method": "sqrt_inverse_frequency",
+        "model_selection_metric": "val_macro_f1",
+        "random_seed": 42
+    },
+    "scheduler": {
+        "name": "ReduceLROnPlateau",
+        "mode": "max",
+        "factor": 0.5,
+        "patience": 3,
+        "min_lr": 0.0
+    },
+    "evaluation": {
+        "primary_metric": "macro_f1",
+        "test_set_usage": "final_evaluation_only",
+        "class_names_order_must_match_manifest": true
+    },
+    "artifacts": {
+        "checkpoint_best": "checkpoints/checkpoint_best.pt",
+        "checkpoint_last": "checkpoints/checkpoint_last.pt",
+        "training_history": "history/training_history.json",
+        "metrics": "metrics/metrics.json",
+        "predictions": "metrics/predictions.csv",
+        "training_log": "logs/training.log"
+    },
+    "notes": [
+        "This is a configuration specification only; train.py does not yet load it.",
+        "Reuse the existing manifest and do not create a new split.",
+        "Do not use the test set for checkpoint selection or hyperparameter tuning.",
+        "Resolve relative paths from the experiment directory in the future config loader."
+    ]
+}
