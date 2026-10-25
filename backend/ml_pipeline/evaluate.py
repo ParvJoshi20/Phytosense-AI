@@ -119,7 +119,7 @@ from config import (
 # These modules may internally use either package-style or local imports.
 # The sys.path bootstrap above makes both styles resolvable.
 from backend.ml_pipeline.dataset import create_datasets
-from backend.ml_pipeline.models.efficientnetv2 import create_model
+from backend.ml_pipeline.models.registry import create_model_by_name
 
 
 # ============================================================================
@@ -721,7 +721,8 @@ def main():
 
     print("\nCreating model...")
 
-    model = create_model(
+    model = create_model_by_name(
+        model_name=MODEL_NAME,
         num_classes=NUM_CLASSES,
         pretrained=False,
     )

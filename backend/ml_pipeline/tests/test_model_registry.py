@@ -29,9 +29,18 @@ def main():
     models = list_models()
     print("Registered models:", models)
 
-    assert "tf_efficientnetv2_b0" in models
-    assert "resnet50" in models
+    expected_models = {
+        "tf_efficientnetv2_b0",
+        "resnet50",
+        "mobilenetv3_large_100",
+        "densenet121",
+        "convnext_tiny",
+    }
+    assert expected_models.issubset(set(models))
     assert get_model_display_name("resnet50") == "ResNet50"
+    assert get_model_display_name("mobilenetv3_large_100") == "MobileNetV3-Large"
+    assert get_model_display_name("densenet121") == "DenseNet121"
+    assert get_model_display_name("convnext_tiny") == "ConvNeXt-Tiny"
 
     print("\nCreating ResNet50 without pretrained weights...")
 

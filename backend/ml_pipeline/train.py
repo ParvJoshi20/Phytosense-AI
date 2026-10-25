@@ -92,8 +92,8 @@ from dataset.dataset import (
     get_class_weights,
 )
 
-from models.efficientnetv2 import (
-    create_model,
+from models.registry import (
+    create_model_by_name,
     get_num_parameters,
 )
 
@@ -958,7 +958,8 @@ def main():
     logger.info("MODEL")
     logger.info("-" * 70)
 
-    model = create_model(
+    model = create_model_by_name(
+        model_name=MODEL_NAME,
         num_classes=NUM_CLASSES,
         pretrained=PRETRAINED,
     )

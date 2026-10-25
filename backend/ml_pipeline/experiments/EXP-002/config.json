@@ -1,10 +1,9 @@
-
 {
     "experiment": {
         "id": "EXP-002",
-        "name": "ResNet50 Model Comparison",
+        "name": "Tomato Disease Architecture Comparison",
         "dataset_version": "PlantVillage Tomato v1",
-        "status": "configuration_only"
+        "status": "ready_to_run"
     },
     "dataset": {
         "manifest_path": "../../manifests/plantvillage_tomato_split.csv",
@@ -24,7 +23,7 @@
             "Tomato___healthy"
         ],
         "split": {
-            "train": 0.70,
+            "train": 0.7,
             "validation": 0.15,
             "test": 0.15,
             "source": "existing frozen manifest; do not regenerate"
@@ -46,8 +45,16 @@
     "preprocessing": {
         "resize_size": 256,
         "image_size": 224,
-        "mean": [0.485, 0.456, 0.406],
-        "std": [0.229, 0.224, 0.225],
+        "mean": [
+            0.485,
+            0.456,
+            0.406
+        ],
+        "std": [
+            0.229,
+            0.224,
+            0.225
+        ],
         "validation_test": [
             "Resize(256)",
             "CenterCrop(224)",
@@ -97,9 +104,39 @@
         "training_log": "logs/training.log"
     },
     "notes": [
-        "This is a configuration specification only; train.py does not yet load it.",
-        "Reuse the existing manifest and do not create a new split.",
+        "Uses the existing frozen manifest; do not regenerate or change the split.",
+        "The existing EXP-001 EfficientNetV2-B0 checkpoint and metrics are the baseline reference; do not retrain it as part of EXP-002 unless explicitly intended.",
+        "Select the model with PHYTOSENSE_MODEL_NAME. Each candidate writes artifacts into its own EXP-002 subdirectory.",
+        "Select EXP-002 with PHYTOSENSE_EXPERIMENT_ID=EXP-002.",
         "Do not use the test set for checkpoint selection or hyperparameter tuning.",
-        "Resolve relative paths from the experiment directory in the future config loader."
-    ]
+        "The manifest split key is val (not validation); expected split counts are train=12712, val=2727, test=2721."
+    ],
+    "comparison": {
+        "candidate_models": [
+            {
+                "name": "tf_efficientnetv2_b0",
+                "display_name": "EfficientNetV2-B0",
+                "role": "existing_EXP-001_baseline_reference",
+                "reuse_existing_checkpoint_and_metrics": true
+            },
+            {
+                "name": "resnet50",
+                "display_name": "ResNet50"
+            },
+            {
+                "name": "mobilenetv3_large_100",
+                "display_name": "MobileNetV3-Large"
+            },
+            {
+                "name": "densenet121",
+                "display_name": "DenseNet121"
+            },
+            {
+                "name": "convnext_tiny",
+                "display_name": "ConvNeXt-Tiny"
+            }
+        ],
+        "artifact_layout": "experiments/EXP-002/<model_name>/",
+        "selection_rule": "Best checkpoint selected using validation Macro F1; test split used only for final evaluation."
+    }
 }
